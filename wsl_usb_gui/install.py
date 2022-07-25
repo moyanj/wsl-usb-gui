@@ -119,9 +119,9 @@ def check_kernel_version():
 
 def install_client():
     try:
-        rsp = run(f'bash -c "sudo apt install linux-tools-5.4.0-77-generic hwdata; sudo update-alternatives --install /usr/local/bin/usbip usbip /usr/lib/linux-tools/*/usbip 20"', show=True)
         logging.info("Installing WSL client tools:")
-        logging.info(rsp.stdout.decode())
+        rsp = run(["wsl", "--user", "root", "bash", "-c", "apt install linux-tools-5.4.0-77-generic hwdata; update-alternatives --install /usr/local/bin/usbip usbip /usr/lib/linux-tools/*/usbip 20"]).stdout.strip()
+        logging.info(rsp.decode())
         return True
     except Exception as ex:
         logging.exception(ex)
@@ -179,6 +179,11 @@ class ProgressDialog(simpledialog.SimpleDialog):
         self._bar['value'] = value
         self.root.update()
 
+    def set_text(self, text):
+        self.message['text'] = text
+        self.root.update()
+
+
 def install_task(root=None):
     global root_win
     if root:
@@ -208,18 +213,23 @@ def install_task(root=None):
     
     # Install tasks
     progress_bar.set_progress(0)
+    progress_bar.set_text("Check/Update WSL to WSL2...")
     rsp = check_wsl_version()
 
     progress_bar.set_progress(1)
+    progress_bar.set_text("Check/Update WSL2 Kernel Version...")
     rsp &= check_kernel_version()
 
     progress_bar.set_progress(2)
+    progress_bar.set_text("Install WSL2 usbipd tools...")
     rsp &= install_client()
 
     progress_bar.set_progress(3)
+    progress_bar.set_text("Install usbipd-win service...")
     rsp &= install_server()
     
     progress_bar.set_progress(4)
+    progress_bar.set_text("Finished.")
     time.sleep(1)
 
     logging.info("Finished")
