@@ -2,7 +2,7 @@
 import asyncio
 from tkinter import *
 from tkinter.ttk import *
-from tkinter import simpledialog
+from tkinter import simpledialog, PanedWindow
 from tkinter.messagebox import showwarning, askokcancel, showinfo
 import json
 import threading
@@ -58,25 +58,28 @@ class WslUsbGui:
         self.tkroot.geometry("600x800")
         self.tkroot.iconbitmap(ICON_PATH)
 
+        self.pw = PanedWindow(orient="vertical", showhandle=False, sashwidth=6, sashrelief='groove')
+
+
         self.usb_devices = []
         self.pinned_profiles: List[Profile] = []
         self.name_mapping = dict()
 
         ## TOP SECTION - Available USB Devices
-        
-        available_control_frame = Frame(self.tkroot)
+        top_frame = Frame(self.pw)
+        available_control_frame = Frame(top_frame)
 
         available_list_label = Label(available_control_frame, text="Windows USB Devices", font='Helvetica 14 bold')
         refresh_button = Button(available_control_frame, text="Refresh", command=self.refresh)
 
-        available_listbox_frame = Frame(self.tkroot)
+        available_listbox_frame = Frame(top_frame)
         self.available_listbox = Treeview(available_listbox_frame, columns=DEVICE_COLUMNS, show="headings")
 
         available_listbox_scroll = Scrollbar(available_listbox_frame)
         available_listbox_scroll.configure(command=self.available_listbox.yview)
         self.available_listbox.configure(yscrollcommand=available_listbox_scroll.set)
 
-        available_menu = Menu(self.tkroot, tearoff=0)
+        available_menu = Menu(top_frame, tearoff=0)
         available_menu.add_command(label="Attach to WSL", command=self.attach_wsl)
         available_menu.add_command(label="Auto-Attach Device", command=self.auto_attach_wsl)
         available_menu.add_command(label="Rename Device", command=self.rename_device)
@@ -96,12 +99,12 @@ class WslUsbGui:
                     col, minwidth=50, width=50, anchor=CENTER, stretch=FALSE
                 )                
 
-        available_list_label.grid(column=0, row=0, padx=10)
-        refresh_button.grid(column=2, row=0, sticky=E, padx=10)
+        available_list_label.grid(column=0, row=0, padx=5)
+        refresh_button.grid(column=2, row=0, sticky=E, padx=5)
+
         available_control_frame.rowconfigure(0, weight=1)
         available_control_frame.columnconfigure(1, weight=1)
-
-        available_control_frame.grid(column=0, row=0, sticky=W + E, pady=10)
+        available_control_frame.grid(column=0, row=0, sticky=N + W + E, pady=10, padx=10)
         
         available_listbox_frame.grid(column=0, row=1, sticky=W + E + N + S, pady=10, padx=10)
         available_listbox_frame.rowconfigure(0, weight=1)
@@ -110,10 +113,10 @@ class WslUsbGui:
         available_listbox_scroll.grid(column=1, row=0, sticky=W + N + S)
 
         ## MIDDLE SECTION - USB devices currently attached
+        middle_frame = Frame(self.pw)
         
-        control_frame = Frame(self.tkroot)
+        control_frame = Frame(middle_frame)
         attached_list_label = Label(control_frame, text="WSL USB Devices", font='Helvetica 14 bold')
-        
 
         attach_button = Button(
             control_frame, text="Attach ↓", command=self.attach_wsl
@@ -127,14 +130,14 @@ class WslUsbGui:
             control_frame, text="Rename", command=self.rename_device
         )
         
-        attached_listbox_frame = Frame(self.tkroot)
+        attached_listbox_frame = Frame(middle_frame)
         self.attached_listbox = Treeview(attached_listbox_frame, columns=ATTACHED_COLUMNS, show="headings")
 
         attached_listbox_scroll = Scrollbar(attached_listbox_frame)
         attached_listbox_scroll.configure(command=self.attached_listbox.yview)
         self.attached_listbox.configure(yscrollcommand=attached_listbox_scroll.set)
 
-        attached_menu = Menu(self.tkroot, tearoff=0)
+        attached_menu = Menu(middle_frame, tearoff=0)
         attached_menu.add_command(label="Detach from WSL", command=self.detach_wsl)
         attached_menu.add_command(label="Auto-Attach Device", command=self.auto_attach_wsl)
         attached_menu.add_command(label="Rename Device", command=self.rename_device)
@@ -147,37 +150,40 @@ class WslUsbGui:
             )
 
 
-        attached_list_label.grid(column=0, row=0, padx=10)
+        attached_list_label.grid(column=0, row=0, padx=5)
 
-        attach_button.grid(column=1, row=0, padx=5)
-        detach_button.grid(column=2, row=0, padx=5)
-        auto_attach_button.grid(column=3, row=0, padx=5)
-        rename_button.grid(column=4, row=0, padx=5)
+        attach_button.grid(column=2, row=0, padx=5)
+        detach_button.grid(column=3, row=0, padx=5)
+        auto_attach_button.grid(column=4, row=0, padx=5)
+        rename_button.grid(column=5, row=0, padx=5)
 
-        control_frame.grid(column=0, row=2, sticky=E + W, pady=10)
+        control_frame.rowconfigure(0, weight=1)
+        control_frame.columnconfigure(1, weight=1)
+        control_frame.grid(column=0, row=0, sticky=N + E + W, pady=10, padx=10)
 
-        attached_listbox_frame.grid(column=0, row=3, sticky=W + E + N + S, pady=10, padx=10)
+        attached_listbox_frame.grid(column=0, row=1, sticky=W + E + N + S, pady=10, padx=10)
         attached_listbox_frame.rowconfigure(0, weight=1)
         attached_listbox_frame.columnconfigure(0, weight=1)
         self.attached_listbox.grid(column=0, row=0, sticky=W + E + N + S)
         attached_listbox_scroll.grid(column=1, row=0, sticky=W + N + S)
 
         ## BOTTOM SECTION - saved profiles for auto-attach
+        bottom_frame = Frame(self.pw)
         
-        pinned_control_frame = Frame(self.tkroot)
+        pinned_control_frame = Frame(bottom_frame)
         pinned_list_label = Label(pinned_control_frame, text="Auto-attach Profiles", font='Helvetica 14 bold')
         pinned_list_delete_button = Button(
             pinned_control_frame, text="Delete Profile", command=self.delete_profile
         )
 
-        pinned_listbox_frame = Frame(self.tkroot)
+        pinned_listbox_frame = Frame(bottom_frame)
         self.pinned_listbox = Treeview(pinned_listbox_frame, columns=PROFILES_COLUMNS, show="headings")
 
         pinned_listbox_scroll = Scrollbar(pinned_listbox_frame)
         pinned_listbox_scroll.configure(command=self.pinned_listbox.yview)
         self.pinned_listbox.configure(yscrollcommand=pinned_listbox_scroll.set)
 
-        pinned_menu = Menu(self.tkroot, tearoff=0)
+        pinned_menu = Menu(bottom_frame, tearoff=0)
         pinned_menu.add_command(label="Delete Profile", command=self.delete_profile)
         self.pinned_listbox.bind("<Button-3>", partial(self.do_listbox_menu, listbox=self.pinned_listbox, menu=pinned_menu))
 
@@ -188,12 +194,14 @@ class WslUsbGui:
                 col, minwidth=40, width=50, anchor=W if i else CENTER, stretch=TRUE if i else FALSE
             )
 
-        pinned_list_label.grid(column=0, row=0, padx=10)
-        pinned_list_delete_button.grid(column=3, row=0, padx=10)
+        pinned_list_label.grid(column=0, row=0, padx=5)
+        pinned_list_delete_button.grid(column=2, row=0, padx=5)
 
-        pinned_control_frame.grid(column=0, row=4, sticky=E + W, pady=10)
+        pinned_control_frame.rowconfigure(0, weight=1)
+        pinned_control_frame.columnconfigure(1, weight=1)
+        pinned_control_frame.grid(column=0, row=0, sticky=N + W + E, pady=10, padx=10)
 
-        pinned_listbox_frame.grid(column=0, row=5, sticky=W + E + N + S, pady=10, padx=10)
+        pinned_listbox_frame.grid(column=0, row=1, sticky=W + E + N + S, pady=10, padx=10)
         pinned_listbox_frame.rowconfigure(0, weight=1)
         pinned_listbox_frame.columnconfigure(0, weight=1)
         self.pinned_listbox.grid(column=0, row=0, sticky=W + E + N + S)
@@ -205,11 +213,27 @@ class WslUsbGui:
         self.pinned_listbox.bind("<<TreeviewSelect>>", partial(self.deselect_other_treeviews, treeview=self.pinned_listbox))
 
         ## Window Configure
+        # top_frame.pack(fill="both", expand=True)
+        # top_frame.add(available_control_frame)
+        # top_frame.add(available_listbox_frame)
+
+        top_frame.columnconfigure(0, weight=1)
+        top_frame.rowconfigure(1, weight=1)
+        middle_frame.columnconfigure(0, weight=1)
+        middle_frame.rowconfigure(1, weight=1)
+        bottom_frame.columnconfigure(0, weight=1)
+        bottom_frame.rowconfigure(1, weight=1)
+
+        self.pw.pack(fill="both", expand=True)
+        self.pw.add(top_frame)
+        self.pw.add(middle_frame)
+        self.pw.add(bottom_frame)
         
-        self.tkroot.columnconfigure(0, weight=1)
-        self.tkroot.rowconfigure(1, weight=1)
-        self.tkroot.rowconfigure(3, weight=1)
-        self.tkroot.rowconfigure(5, weight=1)
+        self.pw.columnconfigure(0, weight=1)
+        self.pw.rowconfigure(0, weight=1)
+        self.pw.rowconfigure(1, weight=1)
+        self.pw.rowconfigure(2, weight=1)
+
 
         self.load_config()
         
