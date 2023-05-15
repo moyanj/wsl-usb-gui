@@ -18,15 +18,15 @@ from .usb_monitor import registerDeviceNotification, unregisterDeviceNotificatio
 mod_dir = Path(__file__).parent
 ICON_PATH = str(mod_dir / "usb.ico")
 
-DEVICE_COLUMNS = ["bus_id", "description"]
-DEVICE_COLUMN_WIDTHS = [50, 50]
+DEVICE_COLUMNS = ["bus_id", "description", "shared", "force"]
 ATTACHED_COLUMNS = ["bus_id", "description"]  # , "client"]
-ATTACHED_COLUMN_WIDTHS = [20, 80, 20]
+PROFILES_COLUMNS = ["bus_id", "description"]
+
 USBIPD_PORT = 3240
 CONFIG_FILE = Path(appdirs.user_data_dir("wsl-usb-gui", "")) / "config.json"
 
 
-Device = namedtuple("Device", "BusId Description InstanceId Attached")
+Device = namedtuple("Device", "BusId Description Bind Forced InstanceId Attached")
 Profile = namedtuple("Profile", "BusId Description InstanceId", defaults=(None, None, None))
 
 app: "WslUsbGui" = None
@@ -80,13 +80,21 @@ class WslUsbGui:
         available_menu.add_command(label="Attach to WSL", command=self.attach_wsl)
         available_menu.add_command(label="Auto-Attach Device", command=self.auto_attach_wsl)
         available_menu.add_command(label="Rename Device", command=self.rename_device)
+        available_menu.add_command(label="Bind", command=self.bind)
+        available_menu.add_command(label="Force Bind", command=self.force_bind)
+        available_menu.add_command(label="Unbind", command=self.unbind)
         self.available_listbox.bind("<Button-3>", partial(self.do_listbox_menu, listbox=self.available_listbox, menu=available_menu))
 
         for i, col in enumerate(DEVICE_COLUMNS):
             self.available_listbox.heading(col, text=col.title())
-            self.available_listbox.column(
-                col, minwidth=40, width=50, anchor=W if i else CENTER, stretch=TRUE if i else FALSE
-            )
+            if i < 2:
+                self.available_listbox.column(
+                    col, minwidth=40, width=50, anchor=W if i else CENTER, stretch=TRUE if i else FALSE
+                )
+            else:
+                self.available_listbox.column(
+                    col, minwidth=50, width=50, anchor=CENTER, stretch=FALSE
+                )                
 
         available_list_label.grid(column=0, row=0, padx=10)
         refresh_button.grid(column=2, row=0, sticky=E, padx=10)
@@ -138,6 +146,7 @@ class WslUsbGui:
                 col, minwidth=40, width=50, anchor=W if i else CENTER, stretch=TRUE if i else FALSE
             )
 
+
         attached_list_label.grid(column=0, row=0, padx=10)
 
         attach_button.grid(column=1, row=0, padx=5)
@@ -162,7 +171,7 @@ class WslUsbGui:
         )
 
         pinned_listbox_frame = Frame(self.tkroot)
-        self.pinned_listbox = Treeview(pinned_listbox_frame, columns=DEVICE_COLUMNS, show="headings")
+        self.pinned_listbox = Treeview(pinned_listbox_frame, columns=PROFILES_COLUMNS, show="headings")
 
         pinned_listbox_scroll = Scrollbar(pinned_listbox_frame)
         pinned_listbox_scroll.configure(command=self.pinned_listbox.yview)
@@ -173,7 +182,7 @@ class WslUsbGui:
         self.pinned_listbox.bind("<Button-3>", partial(self.do_listbox_menu, listbox=self.pinned_listbox, menu=pinned_menu))
 
         # setup column names
-        for i, col in enumerate(DEVICE_COLUMNS):
+        for i, col in enumerate(PROFILES_COLUMNS):
             self.pinned_listbox.heading(col, text=col.title())
             self.pinned_listbox.column(
                 col, minwidth=40, width=50, anchor=W if i else CENTER, stretch=TRUE if i else FALSE
@@ -240,8 +249,10 @@ class WslUsbGui:
             if bus_info:
                 instanceId = device["InstanceId"]
                 description = self.name_mapping.get(instanceId, device["Description"])
+                bind = "☒" if device["PersistedGuid"] else "☐"
+                forced = "☒" if device["IsForced"] else "☐"
                 attached = device["ClientIPAddress"]
-                rows.append(Device(str(bus_info), description, instanceId, attached))
+                rows.append(Device(str(bus_info), description, bind, forced, instanceId, attached))
         return rows
 
     def deselect_other_treeviews(self, *args, treeview):
@@ -268,17 +279,48 @@ class WslUsbGui:
                 loop.call_soon_threadsafe(install_deps)
             return None
 
+    
+    @staticmethod
+    def usb_ipd_run_admin_if_needed(command, msg=None):
+        result = run(command)
+        if "error:" in result.stderr and "administrator privileges" in result.stderr:
+            if msg:
+                showwarning(
+                    title="Administrator Privileges",
+                    message="This operation requires Administrator Privileges",
+                )
+            args_str = ', '.join(f'\\"{arg}\\"' for arg in command[1:])
+
+            result = run(r'''Powershell -Command "& { Start-Process \"%s\" -ArgumentList @(%s) -Verb RunAs } "'''
+                % (USBIPD, args_str))
+        return result
+    
+    @staticmethod
+    def bind_bus_id(bus_id, forced):
+        command = [USBIPD, "bind", f"--busid={bus_id}"]
+        if forced:
+            command.append("--force")
+        result = WslUsbGui.usb_ipd_run_admin_if_needed(command)
+        print(result.stdout)
+        print(result.stderr)
+        return result
+
+    @staticmethod
+    def unbind_bus_id(bus_id):
+        command = [USBIPD, "unbind", f"--busid={bus_id}"]
+        result = WslUsbGui.usb_ipd_run_admin_if_needed(command)
+        print(result.stdout)
+        print(result.stderr)
+        return result
+
     @staticmethod
     def attach_wsl_usb(bus_id):
-        result = run([USBIPD, "wsl", "attach", "--busid=" + bus_id])
-        if "error:" in result.stderr and "administrator privileges" in result.stderr:
-            showwarning(
-                title="Administrator Privileges",
-                message="The first time attaching a device to WSL requires elevated privileges; subsequent attaches will succeed with standard user privileges.",
-            )
-            run(r'''Powershell -Command "& { Start-Process \"%s\" -ArgumentList @(\"wsl\", \"attach\", \"--busid=%s\") -Verb RunAs } "'''
-                % (USBIPD, bus_id))
-
+        command = [USBIPD, "wsl", "attach", "--busid=" + bus_id]
+        msg = (
+            "The first time attaching a device to WSL requires elevated privileges; "
+            "subsequent attaches will succeed with standard user privileges."
+        )
+        result = WslUsbGui.usb_ipd_run_admin_if_needed(command, msg)
         print(result.stdout)
         print(result.stderr)
         return result
@@ -427,19 +469,44 @@ class WslUsbGui:
             self.refresh(delay=1000)
             return True
         return False
-
-
-    def attach_wsl(self):
+    
+    
+    def _attach_selection_busid(self):
         selection = self.available_listbox.selection()
         if not selection:
             print("no selection to attach")
             return
         print(self.available_listbox.item(selection[0]))
         bus_id = self.available_listbox.item(selection[0])["values"][0].strip()
-        description = self.available_listbox.item(selection[0])["values"][1]
-        print(f"Attach {bus_id}")
+        # description = self.available_listbox.item(selection[0])["values"][1]
+        return bus_id
+    
+    def force_bind(self):
+        bus_id = self._attach_selection_busid()
+        print(f"Bind (forced) {bus_id}")
+        result = self.bind_bus_id(bus_id, forced=True)
+        print(f"Bind (forced) {bus_id}: {'Success' if not result.returncode else 'Failed'}")
+        self.refresh()
+        self.refresh()
+
+
+    def bind(self):
+        bus_id = self._attach_selection_busid()
+        result = self.bind_bus_id(bus_id, forced=False)
+        print(f"Bind {bus_id}: {'Success' if not result.returncode else 'Failed'}")
+        self.refresh()
+
+    def unbind(self):
+        bus_id = self._attach_selection_busid()
+        result = self.unbind_bus_id(bus_id)
+        print(f"Unbind {bus_id}: {'Success' if not result.returncode else 'Failed'}")
+        self.refresh()
+
+
+    def attach_wsl(self):
+        bus_id = self._attach_selection_busid()
         result = self.attach_wsl_usb(bus_id)
-        print(result.returncode)
+        print(f"Attach {bus_id}: {'Success' if not result.returncode else 'Failed'}")
         """if result.returncode == 0:
             attached_devices[bus_id] = {
                 'bus_id' : bus_id,
@@ -456,8 +523,9 @@ class WslUsbGui:
         if not selection:
             print("no selection to detach")
             return  # no selected item
-        bus_id, description, instanceId, *_ = self.attached_listbox.item(selection[0])["values"]
-        print(f"Detach {bus_id}")
+        dev = Device(*self.attached_listbox.item(selection[0])["values"])
+        bus_id, description, instanceId, = dev.BusId, dev.Description, dev.InstanceId
+        print(f"Detach {bus_id} {description}")
 
         self.remove_pinned_profile(bus_id, description, instanceId)
         
