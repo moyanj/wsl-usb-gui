@@ -26,7 +26,8 @@ build:
     - $env:PYTHONIOENCODING="UTF-8"
 
     # Build app  
-    - py -3.9 -m pip install -U pip==21.2.4 poetry==1.1.6  # newer pip ignores setup.py
+    # newer pip ignores setup.py, newer urllib3 conflicts with older poetry
+    - py -3.9 -m pip install -U pip==21.2.4 poetry==1.1.6 urllib3<=2  
     - py -3.9 -m poetry install
 
     - dir
