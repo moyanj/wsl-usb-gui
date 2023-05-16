@@ -245,6 +245,7 @@ class WslUsbGui:
     
     def load_config(self):
         try:
+            print(f"Loading config from: {CONFIG_FILE}")
             config = json.loads(CONFIG_FILE.read_text())
             if isinstance(config, list):
                 self.pinned_profiles = [self.create_profile(c) for c in config]
@@ -325,16 +326,20 @@ class WslUsbGui:
         if forced:
             command.append("--force")
         result = WslUsbGui.usb_ipd_run_admin_if_needed(command)
-        print(result.stdout)
-        print(result.stderr)
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print(result.stderr)
         return result
 
     @staticmethod
     def unbind_bus_id(bus_id):
         command = [USBIPD, "unbind", f"--busid={bus_id}"]
         result = WslUsbGui.usb_ipd_run_admin_if_needed(command)
-        print(result.stdout)
-        print(result.stderr)
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print(result.stderr)
         return result
 
     @staticmethod
@@ -345,16 +350,22 @@ class WslUsbGui:
             "subsequent attaches will succeed with standard user privileges."
         )
         result = WslUsbGui.usb_ipd_run_admin_if_needed(command, msg)
-        print(result.stdout)
-        print(result.stderr)
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print(result.stderr)
+
         return result
 
 
     @staticmethod
     def detach_wsl_usb(bus_id):
         result = run([USBIPD, "wsl", "detach", "--busid=" + str(bus_id)])
-        print(result.stdout)
-        print(result.stderr)
+        if result.stdout:
+            print(result.stdout)
+        if result.stderr:
+            print(result.stderr)
+
 
 
     def update_pinned_listbox(self):
@@ -464,7 +475,10 @@ class WslUsbGui:
 
     def check_wsl_udev(self):
         # Autostart WSL udev service if needed
-        print(run(["wsl", "--user", "root", "sh", "-c", "pgrep udev || (echo 'starting udev'; service udev restart)"]).stdout.strip())
+        udev_start = run(["wsl", "--user", "root", "sh", "-c", "pgrep udev || (echo 'starting udev'; service udev restart)"]).stdout.strip()
+        udev_start = udev_start.replace('\n', ', ')
+        print(f"udev: {udev_start}")
+        
     
     def lookup_description(self, instanceId):
         if not instanceId:
@@ -645,7 +659,7 @@ class popupTextEntry(simpledialog.SimpleDialog):
 
 
 def usb_callback(attach):
-    print(f"USB attached={attach}")
+    print(f"USB attached: {attach}")
     if app:
         app.refresh(0.5)
 
