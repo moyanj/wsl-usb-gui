@@ -1,20 +1,50 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm[toml]>=6.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wsl_usb_gui"
+authors = [
+    {name = "Andrew Leech", email = "andrew@alelec.net"},
+]
+description = "WSL USB Management Tool"
+dynamic = ["version"]
+
+[tool.setuptools_scm]
+#version_scheme = "wsl_usb_gui.version:version_scheme"
+
 [tool.poetry]
 name = "wsl-usb-gui"
-version = "0.0"
 description = ""
 authors = ["Andrew Leech <andrew@alelec.net>"]
 license = "MIT"
+version = "3.4"
 
 [tool.poetry.dependencies]
 python = "^3.9"
 appdirs = "^1.4.4"
 setuptools-scm = "^6.4.2"
+briefcase = "^0.3.14"
 
 [tool.poetry.dev-dependencies]
-pip = "21.2.4"
-boto3 = "1.14.48"
-briefcase = {git = "https://github.com/andrewleech/briefcase.git", rev = "992ece7e"}
+pip = "23.1.2"
 
-[build-system]
-requires = ["poetry-core>=1.0.0"]
-build-backend = "poetry.core.masonry.api"
+#[build-system]
+#requires = ["poetry-core>=1.0.0"]
+#build-backend = "poetry.core.masonry.api"
+
+[tool.briefcase]
+project_name = "wsl_usb_gui"
+bundle = "net.alelec.wsl-usb-gui"
+license = "MIT license"
+version = "3.4"
+
+[tool.briefcase.app.wsl_usb_gui]
+formal_name = "WSL USB"
+description = "WSL USB Management Tool"
+sources = ['wsl_usb_gui']
+icon = "wsl_usb_gui/usb"
+requires = [
+    "appdirs==1.4.4",
+    "setuptools-scm==6.4.2"
+]

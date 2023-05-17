@@ -27,12 +27,12 @@ build:
 
     # Build app  
     # newer pip ignores setup.py, newer urllib3 conflicts with older poetry
-    - py -3.9 -m pip install -U pip==21.2.4 poetry==1.1.6 urllib3<=2  
+    - py -3.9 -m pip install -U pip==23.1.2 poetry==1.4.2
     - py -3.9 -m poetry install
 
     - dir
     - echo $env:CI_PROJECT_URL/-/raw/$env:CI_COMMIT_SHA/python-3.9.2-embed-amd64-tkinter.zip
-    - py -3.9 -m poetry run python setup.py windows --sanitize-version --build --template briefcase-template
+    - py -3.9 -m poetry run briefcase package windows
     - dir windows
     - copy-item windows\\*.msi .\\
     - dir
