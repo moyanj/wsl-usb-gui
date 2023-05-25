@@ -98,14 +98,17 @@ __localWndProcWrapped = None
 
 def localWndProc(hWnd, msg, wParam, lParam):
     if msg == WM_DEVICECHANGE:
-        details = cast(lParam, POINTER(DEV_BROADCAST_HDR))
-        if details.contents.dbch_devicetype == DBT_DEVTYP_DEVICEINTERFACE:
-            details = cast(lParam, POINTER(DEV_BROADCAST_DEVICEINTERFACE))
-            # For some reason filtering by GUID in RegisterDeviceNotification stopped
-            # working, notifying on everything and filtering the guid here works instead
-            if GUID_DEVINTERFACE_USB_DEVICE.lower() in details.contents.dbcc_name:
-                if wParam in (DBT_DEVICEARRIVAL, DBT_DEVICEREMOVECOMPLETE):
-                    __callback(attach=(wParam == DBT_DEVICEARRIVAL))
+        try:
+            details = cast(lParam, POINTER(DEV_BROADCAST_HDR))
+            if details and details.contents.dbch_devicetype == DBT_DEVTYP_DEVICEINTERFACE:
+                details = cast(lParam, POINTER(DEV_BROADCAST_DEVICEINTERFACE))
+                # For some reason filtering by GUID in RegisterDeviceNotification stopped
+                # working, notifying on everything and filtering the guid here works instead
+                if GUID_DEVINTERFACE_USB_DEVICE.lower() in details.contents.dbcc_name:
+                    if wParam in (DBT_DEVICEARRIVAL, DBT_DEVICEREMOVECOMPLETE):
+                        __callback(attach=(wParam == DBT_DEVICEARRIVAL))
+        except ValueError:
+            print("fail")
 
     if msg == WM_DESTROY:
         unhookWndProc()

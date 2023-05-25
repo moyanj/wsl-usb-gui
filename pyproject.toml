@@ -25,6 +25,8 @@ python = "^3.9"
 appdirs = "^1.4.4"
 setuptools-scm = "^6.4.2"
 briefcase = "^0.3.14"
+wxasync = "^0.49"
+wxpython = "^4.2.0"
 
 [tool.poetry.dev-dependencies]
 pip = "23.1.2"
