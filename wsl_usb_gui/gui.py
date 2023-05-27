@@ -52,7 +52,7 @@ USBIPD_PORT = 3240
 CONFIG_FILE = Path(appdirs.user_data_dir("wsl-usb-gui", "")) / "config.json"
 
 
-Device = namedtuple("Device", "BusId Description shared forced InstanceId Attached")
+Device = namedtuple("Device", "BusId Description shared forced InstanceId Attached time")
 Profile = namedtuple("Profile", "BusId Description InstanceId", defaults=(None, None, None))
 
 gui: Optional["WslUsbGui"] = None
@@ -103,7 +103,7 @@ class WslUsbGui(wx.Frame):
 
         # self.pw = PanedWindow(orient="vertical", showhandle=False, sashwidth=6, sashrelief='groove')
 
-        self.usb_devices = []
+        self.usb_devices: Set[Device] = set()
         self.pinned_profiles: List[Profile] = []
         self.name_mapping = dict()
 
@@ -518,7 +518,11 @@ class WslUsbGui(wx.Frame):
                 bind = True if device["PersistedGuid"] else False
                 forced = True if device["IsForced"] else False
                 attached = device["ClientIPAddress"]
-                rows.append(Device(str(bus_info), description, bind, forced, instanceId, attached))
+                rows.append(
+                    Device(
+                        str(bus_info), description, bind, forced, instanceId, attached, time.time()
+                    )
+                )
         return rows
 
     def deselect_other_treeviews(self, *args, treeview: UltimateListCtrl):
@@ -712,9 +716,12 @@ class WslUsbGui(wx.Frame):
 
         print("Refresh USB")
 
-        self.usb_devices = await asyncio.get_running_loop().run_in_executor(
-            None, self.list_wsl_usb
+        usb_devices = set(
+            await asyncio.get_running_loop().run_in_executor(None, self.list_wsl_usb)
         )
+
+        new_devices = usb_devices - self.usb_devices
+        self.usb_devices = usb_devices
 
         if not self.usb_devices:
             return
@@ -722,16 +729,25 @@ class WslUsbGui(wx.Frame):
         self.attached_listbox.DeleteAllItems()
         self.available_listbox.DeleteAllItems()
         for device in sorted(self.usb_devices, key=lambda d: d.BusId):
+            new = device in new_devices
             if device.Attached:
-                self.attached_listbox.Append(device)
+                row = self.attached_listbox.Append(device)
+                if new:
+                    self.attached_listbox.HighlightRow(row)
             else:
                 if self.attach_if_pinned(device):
-                    # self.attached_listbox.update()
-                    self.attached_listbox.Append(device)
+                    row = self.attached_listbox.Append(device)
+                    if new:
+                        self.attached_listbox.HighlightRow(row)
                 else:
-                    self.available_listbox.Append(device)
+                    row = self.available_listbox.Append(device)
+                    if new:
+                        self.available_listbox.HighlightRow(row)
 
         self.update_pinned_listbox()
+
+    def highlight_row(self, listbox: "ListCtrl", row: int):
+        pass
 
     def refresh(self, delay=0.0):
         asyncio.get_running_loop().call_soon_threadsafe(
@@ -867,6 +883,11 @@ class ListCtrl(UltimateListCtrl):
 
         self.devices: List[Device] = []
         self.columns = []
+
+    def HighlightRow(self, index):
+        original = self.GetItemBackgroundColour(index)
+        self.SetItemBackgroundColour(index, wx.YELLOW)
+        wx.FutureCall(2000, self.SetItemBackgroundColour, index, original)
 
     def InsertColumns(self, names):
         for i, name in enumerate(names):
