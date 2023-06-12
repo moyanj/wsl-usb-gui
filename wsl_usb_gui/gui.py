@@ -1,13 +1,15 @@
-# requires python 3.8+ may work on 3.6, 3.7 definitely broken on <= 3.5 due to subprocess args (text=True)
+import appdirs
 import asyncio
-
-# import PySimpleGUIWx as sg
+import json
+import subprocess
+import time
+from collections import namedtuple
+from functools import partial
+from pathlib import Path
+from typing import *
 
 import wx
 import wxasync
-
-# from wx.lib.splitter import MultiSplitterWindow
-# from wx.lib.mixins.listctrl import ListCtrlAutoWidthMixin
 from wx.lib.agw.ultimatelistctrl import (
     UltimateListCtrl,
     UltimateListItem,
@@ -17,34 +19,19 @@ from wx.lib.agw.ultimatelistctrl import (
     EVT_LIST_ITEM_CHECKED,
 )
 
-# from tkinter import *
-# from tkinter.ttk import *
-# from tkinter import simpledialog, PanedWindow
-import json
-import subprocess
-import time
-from collections import namedtuple
-from pathlib import Path
-from typing import *
-import appdirs
-from functools import partial
 from .usb_monitor import registerDeviceNotification, unregisterDeviceNotification
 
+# High DPI Support.
 import ctypes
-
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(True)
 except:
     pass
 
-
-# sg.theme('SystemDefaultForReal')
-
-
 mod_dir = Path(__file__).parent
 ICON_PATH = str(mod_dir / "usb.ico")
 
-DEVICE_COLUMNS = ["bus_id", "description", "shared", "forced"]
+DEVICE_COLUMNS = ["bus_id", "description", "bound", "forced"]
 ATTACHED_COLUMNS = ["bus_id", "description", "forced"]  # , "client"]
 PROFILES_COLUMNS = ["bus_id", "description"]
 
@@ -52,7 +39,7 @@ USBIPD_PORT = 3240
 CONFIG_FILE = Path(appdirs.user_data_dir("wsl-usb-gui", "")) / "config.json"
 
 
-Device = namedtuple("Device", "BusId Description shared forced InstanceId Attached time")
+Device = namedtuple("Device", "BusId Description bound forced InstanceId Attached")
 Profile = namedtuple("Profile", "BusId Description InstanceId", defaults=(None, None, None))
 
 gui: Optional["WslUsbGui"] = None
@@ -82,10 +69,6 @@ class WslUsbGui(wx.Frame):
         wx.Frame.__init__(self, None, title="WSL USB Manager")
         self.SetIcon(wx.Icon(ICON_PATH, wx.BITMAP_TYPE_ICO))
 
-        # splitter = MultiSplitterWindow(self, style=wx.SP_THIN_SASH|wx.SP_BORDER)
-        # splitter.SetOrientation(wx.VERTICAL)
-        # splitter.SetBackgroundColour(wx.LIGHT_GREY)
-
         splitter_bottom = ProportionalSplitter(self, proportion=0.66, style=wx.SP_LIVE_UPDATE)
         splitter_top = ProportionalSplitter(
             splitter_bottom, proportion=0.33, style=wx.SP_LIVE_UPDATE
@@ -94,15 +77,6 @@ class WslUsbGui(wx.Frame):
         splitter_top.SetMinimumPaneSize(6)
         splitter_bottom.SetMinimumPaneSize(6)
 
-        # splitter_top.SetSashGravity(0.5)
-        # splitter_top.SetSashSize
-        # self.tkroot = Tk()
-        # self.tkroot.wm_title("WSL USB Manager")
-        # self.tkroot.geometry("600x800")
-        # self.tkroot.iconbitmap(ICON_PATH)
-
-        # self.pw = PanedWindow(orient="vertical", showhandle=False, sashwidth=6, sashrelief='groove')
-
         self.usb_devices: Set[Device] = set()
         self.pinned_profiles: List[Profile] = []
         self.name_mapping = dict()
@@ -110,11 +84,10 @@ class WslUsbGui(wx.Frame):
         headingFont = wx.Font(
             16, wx.FONTFAMILY_DECORATIVE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD
         )
-        # listCtrlFont = wx.Font(11, wx.FONTFAMILY_DECORATIVE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_NORMAL)
+
 
         ## TOP SECTION - Available USB Devices
-        # top_frame = Frame(self.pw)
-        # available_control_frame = Frame(top_frame)
+
         top_panel = wx.Panel(splitter_top, style=wx.SUNKEN_BORDER)
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_panel.SetSizerAndFit(top_sizer)
@@ -128,23 +101,10 @@ class WslUsbGui(wx.Frame):
         top_controls.AddStretchSpacer(1)
         top_controls.Add(refresh_button, 1, wx.TOP, border=6)
 
-        # available_listbox_frame = Frame(top_frame)
-
-        # available_listbox_scroll = Scrollbar(available_listbox_frame)
-        # available_listbox_scroll.configure(command=self.available_listbox.yview)
-        # self.available_listbox.configure(yscrollcommand=available_listbox_scroll.set)
-
         self.available_listbox = ListCtrl(top_panel)
         self.available_listbox.InsertColumns(DEVICE_COLUMNS)
 
-        # self.available_listbox.setResizeColumn(2)
-        # self.available_listbox.SetFont(listCtrlFont)
-
         def available_menu(event):
-            # item = event.GetItem()
-            # itemData = self.available_listbox.GetItemData(item).GetData()
-            # itemData = self.available_listbox.devices[item._itemId]
-
             popupmenu = wx.Menu()
             entries = [
                 ("Attach to WSL", self.attach_wsl),
@@ -157,12 +117,8 @@ class WslUsbGui(wx.Frame):
             for entry, fn in entries:
                 menuItem = popupmenu.Append(-1, entry)
                 self.Bind(wx.EVT_MENU, fn, menuItem)
-
             # Show menu
-            # popupmenu.UpdateUI()
-            # self.attached_listbox.Refresh()
-            # self.attached_listbox.Update()
-            self.PopupMenu(popupmenu)  # , self.FromDIP(event.GetPoint()))
+            self.PopupMenu(popupmenu)
 
         def _available_menu(event):
             wx.CallAfter(available_menu, event)
@@ -172,15 +128,15 @@ class WslUsbGui(wx.Frame):
         def available_checked(event):
             available_listbox = event.EventObject
             device: Device = available_listbox.devices[event.Index]
-            shared = available_listbox.GetItem(event.Index, col=2).IsChecked()
+            bound = available_listbox.GetItem(event.Index, col=2).IsChecked()
             forced = available_listbox.GetItem(event.Index, col=3).IsChecked()
             if device.forced and not forced:
                 self.unbind_bus_id(device.BusId)
             elif forced and not device.forced:
                 self.bind_bus_id(device.BusId, forced=True)
-            elif device.shared and not shared:
+            elif device.bound and not bound:
                 self.unbind_bus_id(device.BusId)
-            elif shared and not device.shared:
+            elif bound and not device.bound:
                 self.bind_bus_id(device.BusId, forced=False)
 
         self.available_listbox.Bind(EVT_LIST_ITEM_CHECKED, available_checked)
@@ -188,39 +144,13 @@ class WslUsbGui(wx.Frame):
         top_sizer.Add(top_controls, flag=wx.EXPAND | wx.ALL, border=6)
         top_sizer.Add(self.available_listbox, proportion=1, flag=wx.EXPAND | wx.ALL, border=6)
 
-        # self.available_listbox.bind("<Button-3>", partial(self.do_listbox_menu, listbox=self.available_listbox, menu=available_menu))
-
-        # for i, col in enumerate(DEVICE_COLUMNS):
-        #     self.available_listbox.heading(col, text=col.title())
-        #     if i < 2:
-        #         self.available_listbox.column(
-        #             col, minwidth=40, width=50, anchor=W if i else CENTER, stretch=TRUE if i else FALSE
-        #         )
-        #     else:
-        #         self.available_listbox.column(
-        #             col, minwidth=50, width=50, anchor=CENTER, stretch=FALSE
-        #         )
-
-        # available_list_label.grid(column=0, row=0, padx=5)
-        # refresh_button.grid(column=2, row=0, sticky=E, padx=5)
-
-        # available_control_frame.rowconfigure(0, weight=1)
-        # available_control_frame.columnconfigure(1, weight=1)
-        # available_control_frame.grid(column=0, row=0, sticky=N + W + E, pady=10, padx=10)
-
-        # available_listbox_frame.grid(column=0, row=1, sticky=W + E + N + S, pady=10, padx=10)
-        # available_listbox_frame.rowconfigure(0, weight=1)
-        # available_listbox_frame.columnconfigure(0, weight=1)
-        # self.available_listbox.grid(column=0, row=0, sticky=W + E + N + S)
-        # available_listbox_scroll.grid(column=1, row=0, sticky=W + N + S)
 
         ## MIDDLE SECTION - USB devices currently attached
+
         middle_panel = wx.Panel(splitter_top, style=wx.SUNKEN_BORDER)
         middle_sizer = wx.BoxSizer(wx.VERTICAL)
         middle_panel.SetSizerAndFit(middle_sizer)
-        # middle_frame = Frame(self.pw)
 
-        # control_frame = Frame(middle_frame)
         attached_list_label = wx.StaticText(middle_panel, label="Forwarded Devices")
         attached_list_label.SetFont(headingFont)
 
@@ -238,20 +168,10 @@ class WslUsbGui(wx.Frame):
         middle_controls.Add(auto_attach_button, 1, wx.TOP, border=6)
         middle_controls.Add(rename_button, 1, wx.TOP, border=6)
 
-        # attached_listbox_frame = Frame(middle_frame)
-
-        # attached_listbox_scroll = Scrollbar(attached_listbox_frame)
-        # attached_listbox_scroll.configure(command=self.attached_listbox.yview)
-        # self.attached_listbox.configure(yscrollcommand=attached_listbox_scroll.set)
-
         self.attached_listbox = ListCtrl(middle_panel)
         self.attached_listbox.InsertColumns(ATTACHED_COLUMNS)
 
         def attached_menu(event):
-            # item = event.GetItem()
-            # itemData = self.attached_listbox.GetItemData(item).GetData()
-            # itemData = self.attached_listbox.devices[item._itemId]
-
             popupmenu = wx.Menu()
             entries = [
                 ("Detach from WSL", self.detach_wsl),
@@ -261,13 +181,8 @@ class WslUsbGui(wx.Frame):
             for entry, fn in entries:
                 menuItem = popupmenu.Append(-1, entry)
                 self.Bind(wx.EVT_MENU, fn, menuItem)
-
             # Show menu
-            # event.Skip()
-            # popupmenu.UpdateUI()
-            # self.attached_listbox.Refresh()
-            # self.attached_listbox.Update()
-            self.PopupMenu(popupmenu)  # , self.FromDIP(event.GetPoint()))
+            self.PopupMenu(popupmenu)
 
         def _attached_menu(event):
             wx.CallAfter(attached_menu, event)
@@ -289,36 +204,13 @@ class WslUsbGui(wx.Frame):
         middle_sizer.Add(middle_controls, flag=wx.EXPAND | wx.ALL, border=6)
         middle_sizer.Add(self.attached_listbox, proportion=1, flag=wx.EXPAND | wx.ALL, border=6)
 
-        # for i, col in enumerate(ATTACHED_COLUMNS):
-        #     self.attached_listbox.heading(col, text=col.title())
-        #     self.attached_listbox.column(
-        #         col, minwidth=40, width=50, anchor=W if i else CENTER, stretch=TRUE if i else FALSE
-        #     )
-
-        # attached_list_label.grid(column=0, row=0, padx=5)
-
-        # attach_button.grid(column=2, row=0, padx=5)
-        # detach_button.grid(column=3, row=0, padx=5)
-        # auto_attach_button.grid(column=4, row=0, padx=5)
-        # rename_button.grid(column=5, row=0, padx=5)
-
-        # control_frame.rowconfigure(0, weight=1)
-        # control_frame.columnconfigure(1, weight=1)
-        # control_frame.grid(column=0, row=0, sticky=N + E + W, pady=10, padx=10)
-
-        # attached_listbox_frame.grid(column=0, row=1, sticky=W + E + N + S, pady=10, padx=10)
-        # attached_listbox_frame.rowconfigure(0, weight=1)
-        # attached_listbox_frame.columnconfigure(0, weight=1)
-        # self.attached_listbox.grid(column=0, row=0, sticky=W + E + N + S)
-        # attached_listbox_scroll.grid(column=1, row=0, sticky=W + N + S)
 
         ## BOTTOM SECTION - saved profiles for auto-attach
+
         bottom_panel = wx.Panel(splitter_bottom, style=wx.SUNKEN_BORDER)
         bottom_sizer = wx.BoxSizer(wx.VERTICAL)
         bottom_panel.SetSizerAndFit(bottom_sizer)
-        # bottom_frame = Frame(self.pw)
 
-        # pinned_control_frame = Frame(bottom_frame)
         pinned_list_label = wx.StaticText(bottom_panel, label="Auto-Attach Profiles")
         pinned_list_label.SetFont(headingFont)
         pinned_list_delete_button = self.Button(
@@ -330,24 +222,10 @@ class WslUsbGui(wx.Frame):
         bottom_controls.AddStretchSpacer(1)
         bottom_controls.Add(pinned_list_delete_button, 1, wx.TOP, border=6)
 
-        # pinned_listbox_frame = Frame(bottom_frame)
-
-        # pinned_listbox_scroll = Scrollbar(pinned_listbox_frame)
-        # pinned_listbox_scroll.configure(command=self.pinned_listbox.yview)
-        # self.pinned_listbox.configure(yscrollcommand=pinned_listbox_scroll.set)
-
-        # pinned_menu = [
-        #     '&Right', [
-        #         self.Menu(label="Delete Profile", command=self.delete_profile)
-        #     ]
-        # ]
-
         self.pinned_listbox = ListCtrl(bottom_panel)
         self.pinned_listbox.InsertColumns(PROFILES_COLUMNS)
 
         def profile_menu(event):
-            # item = event.GetItem()
-
             popupmenu = wx.Menu()
             entries = [
                 ("Delete Profile", self.delete_profile),
@@ -356,11 +234,6 @@ class WslUsbGui(wx.Frame):
                 menuItem = popupmenu.Append(-1, entry)
                 self.Bind(wx.EVT_MENU, fn, menuItem)
 
-            # Show menu
-            # position = self.FromDIP(self.pinned_listbox.GetScreenPosition() + event.GetPoint())
-            # popupmenu.UpdateUI()
-            # self.attached_listbox.Refresh()
-            # self.attached_listbox.Update()
             self.PopupMenu(popupmenu)  # , position)
 
         def _profile_menu(event):
@@ -371,25 +244,8 @@ class WslUsbGui(wx.Frame):
         bottom_sizer.Add(bottom_controls, flag=wx.EXPAND | wx.ALL, border=6)
         bottom_sizer.Add(self.pinned_listbox, proportion=1, flag=wx.EXPAND | wx.ALL, border=6)
 
-        # setup column names
-        # for i, col in enumerate(PROFILES_COLUMNS):
-        #     self.pinned_listbox.heading(col, text=col.title())
-        #     self.pinned_listbox.column(
-        #         col, minwidth=40, width=50, anchor=W if i else CENTER, stretch=TRUE if i else FALSE
-        #     )
 
-        # pinned_list_label.grid(column=0, row=0, padx=5)
-        # pinned_list_delete_button.grid(column=2, row=0, padx=5)
-
-        # pinned_control_frame.rowconfigure(0, weight=1)
-        # pinned_control_frame.columnconfigure(1, weight=1)
-        # pinned_control_frame.grid(column=0, row=0, sticky=N + W + E, pady=10, padx=10)
-
-        # pinned_listbox_frame.grid(column=0, row=1, sticky=W + E + N + S, pady=10, padx=10)
-        # pinned_listbox_frame.rowconfigure(0, weight=1)
-        # pinned_listbox_frame.columnconfigure(0, weight=1)
-        # self.pinned_listbox.grid(column=0, row=0, sticky=W + E + N + S)
-        # pinned_listbox_scroll.grid(column=1, row=0, sticky=W + N + S)
+        ## Window Configure
 
         # Ensure only one device can be selected at a time
         self.available_listbox.Bind(
@@ -404,44 +260,6 @@ class WslUsbGui(wx.Frame):
             wx.EVT_LIST_ITEM_SELECTED,
             partial(self.deselect_other_treeviews, treeview=self.pinned_listbox),
         )
-        ## Window Configure
-
-        # top_frame.pack(fill="both", expand=True)
-        # top_frame.add(available_control_frame)
-        # top_frame.add(available_listbox_frame)
-
-        # top_frame.columnconfigure(0, weight=1)
-        # top_frame.rowconfigure(1, weight=1)
-        # middle_frame.columnconfigure(0, weight=1)
-        # middle_frame.rowconfigure(1, weight=1)
-        # bottom_frame.columnconfigure(0, weight=1)
-        # bottom_frame.rowconfigure(1, weight=1)
-
-        # self.pw.pack(fill="both", expand=True)
-        # self.pw.add(top_frame)
-        # self.pw.add(middle_frame)
-        # self.pw.add(bottom_frame)
-
-        # self.pw.columnconfigure(0, weight=1)
-        # self.pw.rowconfigure(0, weight=1)
-        # self.pw.rowconfigure(1, weight=1)
-        # self.pw.rowconfigure(2, weight=1)
-
-        # self = sg.Window(
-        #     title='WSL USB Manager',
-        #     layout=top_layout + middle_layout + bottom_layout,
-        #     size=(600,800),
-        #     icon=ICON_PATH,
-        #     resizable=True,
-        # )
-
-        self.load_config()
-
-        self.refresh()
-
-        # splitter.AppendWindow(top_panel)
-        # splitter.AppendWindow(middle_panel)
-        # splitter.AppendWindow(bottom_panel)
 
         splitter_top.SplitHorizontally(top_panel, middle_panel)
         splitter_bottom.SplitHorizontally(splitter_top, bottom_panel)
@@ -451,6 +269,9 @@ class WslUsbGui(wx.Frame):
 
         sizer.SetSizeHints(self)
         self.SetSizerAndFit(sizer)
+
+        self.load_config()
+        self.refresh()
 
         self.Show(True)
         self.SetSize(self.FromDIP(wx.Size(600, 800)))
@@ -465,19 +286,6 @@ class WslUsbGui(wx.Frame):
         key = f"_menu_{label.replace(' ', '_')}"
         return label
 
-    # def _CreateCheckBoxBitmap(self, flag=0, size=(16, 16)):
-    #     """Create a bitmap of the platforms native checkbox. The flag
-    #     is used to determine the checkboxes state (see wx.CONTROL_*)
-
-    #     """
-    #     bmp = wx.Bitmap(*size)
-    #     dc = wx.MemoryDC(bmp)
-    #     dc.SetBackground(wx.WHITE_BRUSH)
-    #     dc.Clear()
-    #     wx.RendererNative.Get().DrawCheckBox(self, dc,
-    #                                          (0, 0, size[0], size[1]), flag)
-    #     dc.SelectObject(wx.NullBitmap)
-    #     return bmp
 
     @staticmethod
     def create_profile(busid, description, instanceid):
@@ -520,7 +328,7 @@ class WslUsbGui(wx.Frame):
                 attached = device["ClientIPAddress"]
                 rows.append(
                     Device(
-                        str(bus_info), description, bind, forced, instanceId, attached, time.time()
+                        str(bus_info), description, bind, forced, instanceId, attached
                     )
                 )
         return rows
@@ -547,7 +355,7 @@ class WslUsbGui(wx.Frame):
         except Exception as ex:
             if isinstance(ex, FileNotFoundError):
                 loop.call_soon_threadsafe(install_deps)
-            return None
+            return []
 
     @staticmethod
     def usb_ipd_run_admin_if_needed(command, msg=None):
@@ -607,6 +415,9 @@ class WslUsbGui(wx.Frame):
         if "client not correctly installed" in result.stderr.lower():
             loop.call_soon_threadsafe(install_deps)
 
+        elif "is already attached to a client." in result.stderr.lower():
+            # Not an error, we've just tried to attach twice.
+            pass
         elif "error:" in result.stderr.lower():
             err = [l for l in result.stderr.lower().split("\n") if "error:" in l][0].strip()
 
@@ -674,8 +485,6 @@ class WslUsbGui(wx.Frame):
             print("no selection to rename")
             return
 
-        # busid, description, *args = selection["values"]
-
         device = [
             d
             for d in self.usb_devices
@@ -691,10 +500,6 @@ class WslUsbGui(wx.Frame):
         newname = None
         if dlg.ShowModal() == wx.ID_OK:
             newname = dlg.GetValue()
-
-        # getnewname = popupTextEntry(self, device.BusId, current)
-        # self.tkroot.wait_window(getnewname.root)
-        # newname = getnewname.value
 
         if newname is None:
             # Cancel
@@ -793,7 +598,6 @@ class WslUsbGui(wx.Frame):
             if desc and device.Description.strip() != desc.strip():
                 continue
             self.attach_wsl_usb(device.BusId)
-            # self.refresh(delay=3000)  # Gets refreshed on USB change
             return True
         return False
 
@@ -815,25 +619,15 @@ class WslUsbGui(wx.Frame):
     def bind(self, event=None):
         bus_id = self._attach_selection_busid()
         result = self.bind_bus_id(bus_id, forced=False)
-        # self.refresh()
 
     def unbind(self, event=None):
         bus_id = self._attach_selection_busid()
         self.unbind_bus_id(bus_id)
-        # self.refresh()
 
     def attach_wsl(self, event=None):
         bus_id = self._attach_selection_busid()
         result = self.attach_wsl_usb(bus_id)
         print(f"Attach {bus_id}: {'Success' if not result.returncode else 'Failed'}")
-        """if result.returncode == 0:
-            attached_devices[bus_id] = {
-                'bus_id' : bus_id,
-                'port' : len(attached_devices),
-                'description' : description
-            }
-        print(attached_devices)
-        """
         time.sleep(0.5)
         self.refresh()
 
@@ -860,25 +654,12 @@ class WslUsbGui(wx.Frame):
 
         popup = popupAutoAttach(self, device.BusId, device.Description, device.InstanceId)
         popup.ShowModal()
-        # self.tkroot.wait_window(popup.root)
 
         self.refresh()
-
-    # def do_listbox_menu(self, event, listbox, menu):
-    #     try:
-    #         listbox.selection_clear()
-    #         iid = listbox.identify_row(event.y)
-    #         if iid:
-    #             listbox.selection_set(iid)
-    #             menu.tk_popup(event.x_root, event.y_root)
-    #     finally:
-    #         menu.grab_release()
 
 
 class ListCtrl(UltimateListCtrl):
     def __init__(self, parent, *args, **kw):
-        # wx.ListCtrl.__init__(self, parent, wx.ID_ANY, style=wx.LC_REPORT)
-        # ListCtrlAutoWidthMixin.__init__(self)
         UltimateListCtrl.__init__(self, parent, wx.ID_ANY, agwStyle=ULC_REPORT)
 
         self.devices: List[Device] = []
@@ -892,12 +673,9 @@ class ListCtrl(UltimateListCtrl):
     def InsertColumns(self, names):
         for i, name in enumerate(names):
             info = UltimateListItem()
-            # if i > 1:
             info._mask = (
                 wx.LIST_MASK_TEXT
-            )  # | wx.LIST_MASK_IMAGE | wx.LIST_MASK_FORMAT | ULC_MASK_CHECK
-            # else:
-            # info._mask = wx.LIST_MASK_TEXT
+            )
             info._image = []
             info._format = 0
             info._kind = 1
@@ -953,7 +731,7 @@ class ProportionalSplitter(wx.SplitterWindow):
         self.ResetSash()
         self.Bind(wx.EVT_SIZE, self.OnReSize)
         self.Bind(wx.EVT_SPLITTER_SASH_POS_CHANGED, self.OnSashChanged, id=id)
-        ##hack to set sizes on first paint event
+        # hack to set sizes on first paint event
         self.Bind(wx.EVT_PAINT, self.OnPaint)
         self.firstpaint = True
 
