@@ -1,7 +1,9 @@
 import appdirs
 import asyncio
+import importlib.resources
 import json
 import subprocess
+import sys
 import time
 from collections import namedtuple
 from functools import partial
@@ -28,16 +30,14 @@ try:
 except:
     pass
 
-mod_dir = Path(__file__).parent
-ICON_PATH = str(mod_dir / "usb.ico")
 
 DEVICE_COLUMNS = ["bus_id", "description", "bound", "forced"]
 ATTACHED_COLUMNS = ["bus_id", "description", "forced"]  # , "client"]
 PROFILES_COLUMNS = ["bus_id", "description"]
 
 USBIPD_PORT = 3240
-CONFIG_FILE = Path(appdirs.user_data_dir("wsl-usb-gui", "")) / "config.json"
-
+APP_DIR = Path(appdirs.user_data_dir("wsl-usb-gui", ""))
+CONFIG_FILE = APP_DIR / "config.json"
 
 Device = namedtuple("Device", "BusId Description bound forced InstanceId Attached")
 Profile = namedtuple("Profile", "BusId Description InstanceId", defaults=(None, None, None))
@@ -64,10 +64,25 @@ def run(args):
     )
 
 
+def get_icon():
+    icon = Path(sys.executable).parent / "usb.ico"
+    if not icon.exists():
+        try:
+            icon = Path(__file__).parent / "usb.ico"
+        except:
+            icon = None
+    if icon is not None:
+        return wx.Icon(str(icon), wx.BITMAP_TYPE_ICO)
+
+
 class WslUsbGui(wx.Frame):
     def __init__(self):
         wx.Frame.__init__(self, None, title="WSL USB Manager")
-        self.SetIcon(wx.Icon(ICON_PATH, wx.BITMAP_TYPE_ICO))
+
+        self.icon = get_icon()
+
+        if self.icon:
+            self.SetIcon(self.icon)
 
         splitter_bottom = ProportionalSplitter(self, proportion=0.66, style=wx.SP_LIVE_UPDATE)
         splitter_top = ProportionalSplitter(
@@ -652,7 +667,7 @@ class WslUsbGui(wx.Frame):
             print("no selection to create profile for")
             return
 
-        popup = popupAutoAttach(self, device.BusId, device.Description, device.InstanceId)
+        popup = popupAutoAttach(self, device.BusId, device.Description, device.InstanceId, self.icon)
         popup.ShowModal()
 
         self.refresh()
@@ -668,7 +683,7 @@ class ListCtrl(UltimateListCtrl):
     def HighlightRow(self, index):
         original = self.GetItemBackgroundColour(index)
         self.SetItemBackgroundColour(index, wx.YELLOW)
-        wx.FutureCall(2000, self.SetItemBackgroundColour, index, original)
+        wx.CallLater(2000, self.SetItemBackgroundColour, index, original)
 
     def InsertColumns(self, names):
         for i, name in enumerate(names):
@@ -783,9 +798,11 @@ class ProportionalSplitter(wx.SplitterWindow):
 
 
 class popupAutoAttach(wx.Dialog):
-    def __init__(self, parent, bus_id, description, instanceId):
+    def __init__(self, parent, bus_id, description, instanceId, icon):
         super().__init__(parent, title="New Auto-Attach Profile")
-        self.SetIcon(wx.Icon(ICON_PATH, wx.BITMAP_TYPE_ICO))
+
+        if icon:
+            self.SetIcon(str(icon))
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
 
@@ -893,9 +910,7 @@ async def amain():
 
 
 def main():
-    global loop
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(amain())
+    asyncio.run(amain())
 
 
 if __name__ == "__main__":
