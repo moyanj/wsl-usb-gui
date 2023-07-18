@@ -369,7 +369,7 @@ class WslUsbGui(wx.Frame):
             return self.parse_state(result.stdout)
         except Exception as ex:
             if isinstance(ex, FileNotFoundError):
-                loop.call_soon_threadsafe(install_deps)
+                asyncio.get_event_loop().call_soon_threadsafe(install_deps)
             return []
 
     @staticmethod
@@ -428,7 +428,7 @@ class WslUsbGui(wx.Frame):
             print(result.stderr)
 
         if "client not correctly installed" in result.stderr.lower():
-            loop.call_soon_threadsafe(install_deps)
+            asyncio.get_event_loop().call_soon_threadsafe(install_deps)
 
         elif "is already attached to a client." in result.stderr.lower():
             # Not an error, we've just tried to attach twice.
@@ -866,7 +866,7 @@ def usb_callback(attach):
 
 
 def install_deps():
-    global USBIPD
+    global USBIPD, gui
     rsp = wx.MessageBox(
         caption="Install Dependencies",
         message=(
@@ -878,7 +878,7 @@ def install_deps():
     if rsp == wx.ID_YES:
         from .install import install_task
 
-        rsp = install_task()
+        rsp = install_task(gui)
         wx.MessageBox(
             caption="Finished", message="Finished Installation.", style=wx.OK | wx.ICON_INFORMATION
         )

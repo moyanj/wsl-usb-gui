@@ -1,13 +1,10 @@
+import appdirs
+import logging
+import subprocess
 import sys
 import time
+import wx
 from pathlib import Path
-
-app_packages = Path(__file__).parent / ".." / ".." / "app_packages"
-sys.path.extend([str(app_packages.resolve())])
-
-import appdirs
-import subprocess
-import logging
 
 user_data_dir = Path(appdirs.user_data_dir("wsl-usb-gui", ""))
 user_data_dir.mkdir(parents=True, exist_ok=True)
@@ -18,27 +15,24 @@ logging.basicConfig(format="%(asctime)s | %(levelname)-8s | %(message)s", filena
 
 logging.info("Running post-install script")
 
-try:
-    import tkinter as tk
-    from tkinter import ttk
-    from tkinter import simpledialog
-    from tkinter.messagebox import askokcancel
-except:
-    logging.error("Tkinter not available")
-
 
 def run(args, show=False):
     CREATE_NO_WINDOW = 0x08000000
     return subprocess.run(
         args,
-        capture_output=True, 
+        capture_output=True,
         creationflags=0 if show else CREATE_NO_WINDOW,
         shell=(isinstance(args, str))
     )
 
 def msgbox_ok_cancel(title, message):
-    ret = askokcancel(title, message)
-    return ret
+    ret = wx.MessageDialog(
+        parent=None,
+        caption=title,
+        message=message,
+        style=wx.OK | wx.CANCEL | wx.ICON_INFORMATION,
+    )
+    return ret == wx.ID_OK
 
 
 # Check WSL Version
@@ -105,7 +99,7 @@ def check_kernel_version():
             run(r'''Powershell -Command "& { Start-Process \"wsl\" -ArgumentList @(\"--update\") -Verb RunAs } "''')
             run("wsl --shutdown")
         return True
-    
+
     except Exception as ex:
         logging.exception(ex)
         rsp = msgbox_ok_cancel(
@@ -141,8 +135,12 @@ def install_client():
 
 
 def install_server():
-    app_dir = Path(__file__).parent.parent.parent.resolve()
-    installers = list(app_dir.glob("usbipd-win*.msi"))
+    app_dir = Path(sys.executable).parent.resolve()
+    try:
+        src_dir = Path(__file__).parent.parent.resolve()
+    except:
+        src_dir = Path(".")
+    installers = list(app_dir.glob("usbipd-win*.msi")) + list(src_dir.glob("usbipd-win*.msi"))
     try:
         if not installers:
             msg = f"Could not find usbipd-win installer in: {app_dir}"
@@ -168,79 +166,31 @@ def install_server():
 root_win = None
 
 
-class ProgressDialog(simpledialog.SimpleDialog):
-    def __init__(self, master, text='', title=None, class_=None, max=100):
-        super().__init__(master=master, text=text, title=title, class_=class_)
-        self.default = None
-        self.cancel = None
+def install_task(parent=None):
+    if parent is None:
+        __app = wx.App()
 
-        self._bar = ttk.Progressbar(self.root, orient="horizontal", 
-                                    length=200, mode="determinate")
-        
-        self._bar["maximum"] = max
-        self._bar.pack(expand=True, fill=tk.X, side=tk.BOTTOM, pady=10, padx=10)
-        self.root.attributes("-topmost", True)
+    progress_bar = wx.ProgressDialog(parent=parent, message='Installing...',
+                       title='Installing', maximum=4)
 
-    def set_progress(self, value):
-        self._bar['value'] = value
-        self.root.update()
-
-    def set_text(self, text):
-        self.message['text'] = text
-        self.root.update()
-
-
-def install_task(root=None):
-    global root_win
-    if root:
-        root_win = root
-        root_created = False
-    else:
-        root_win = tk.Tk()
-        root_win.overrideredirect(1)
-        root_win.update_idletasks()
-        root_win.tk.eval(f'tk::PlaceWindow {root_win._w} center')
-
-        window_width = 220
-        window_height = 100
-        screen_width = root_win.winfo_screenwidth()
-        screen_height = root_win.winfo_screenheight()
-        x_cordinate = int((screen_width/2) - (window_width/2)) - 70
-        y_cordinate = int((screen_height/2) - (window_height/2)) - 200
-        root_win.geometry("{}x{}+{}+{}".format(window_width, window_height, x_cordinate, y_cordinate))
-        root_win.attributes('-alpha', 0.0)
-        # root_win.withdraw()
-        root_created = True
-        
-    root_win.update()
-
-    progress_bar = ProgressDialog(master=root_win, text='Installing...',
-                       title='Installing', max=4)
-    
     # Install tasks
-    progress_bar.set_progress(0)
-    progress_bar.set_text("Check/Update WSL to WSL2...")
+    progress_bar.Update(0, "Check/Update WSL to WSL2...")
     rsp = check_wsl_version()
 
-    progress_bar.set_progress(1)
-    progress_bar.set_text("Check/Update WSL2 Kernel Version...")
+    progress_bar.Update(1, "Check/Update WSL2 Kernel Version...")
     rsp &= check_kernel_version()
 
-    progress_bar.set_progress(2)
-    progress_bar.set_text("Install WSL2 usbipd tools...")
+    progress_bar.Update(2, "Install WSL2 usbipd tools...")
     rsp &= install_client()
 
-    progress_bar.set_progress(3)
-    progress_bar.set_text("Install usbipd-win service...")
+    progress_bar.Update(3, "Install usbipd-win service...")
     rsp &= install_server()
-    
-    progress_bar.set_progress(4)
-    progress_bar.set_text("Finished.")
+
+    progress_bar.Update(4, "Finished.")
     time.sleep(1)
 
     logging.info("Finished")
-    if root_created:
-        root_win.destroy()
+    progress_bar.Destroy()
     return rsp
 
 
