@@ -120,7 +120,13 @@ def check_kernel_version():
 def install_client():
     try:
         logging.info("Installing WSL client tools:")
-        rsp = run(["wsl", "--user", "root", "bash", "-c", "apt install linux-tools-5.4.0-77-generic hwdata; update-alternatives --install /usr/local/bin/usbip usbip /usr/lib/linux-tools/*/usbip 20"]).stdout.strip()
+        cmd = (
+            "apt install -y linux-tools-generic hwdata &&"
+            "latest=$(ls -vr1 /usr/lib/linux-tools/*/usbip | head -1) &&"
+            "echo \"${latest}\" &&"
+            "update-alternatives --verbose --install /usr/local/bin/usbip usbip \"${latest}\" 20"
+        )
+        rsp = run(["wsl", "--user", "root", "bash", "-c", cmd]).stdout.strip()
         logging.info(rsp.decode())
         return True
     except Exception as ex:

@@ -355,6 +355,15 @@ class WslUsbGui:
         if result.stderr:
             print(result.stderr)
 
+        if "client not correctly installed"  in result.stderr.lower():
+            loop.call_soon_threadsafe(install_deps)
+
+        elif "error:" in result.stderr.lower():
+            err = [l for l in result.stderr.lower().split("\n") if "error:" in l][0].strip()
+            showwarning(
+                title="Failed to attach",
+                message=err,
+            )s
         return result
 
 
