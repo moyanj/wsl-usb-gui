@@ -24,12 +24,10 @@
             "name": "Build installer",
             "type": "python",
             "request": "launch",
-            "program": "setup.py",
+            "module": "briefcase",
             "args": [
-                "windows", 
-                "--sanitize-version", 
-                "--build", 
-                "--template", "briefcase-template",
+                "package",
+                "windows",
             ],
             "console": "integratedTerminal",
             "justMyCode": false

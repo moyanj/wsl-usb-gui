@@ -1,52 +1,51 @@
+[project]
+name = "wsl-usb-gui"
+description = "WSL USB Management Tool"
+authors = [
+    { name = "Andrew Leech", email = "andrew@alelec.net" }
+]
+dynamic = ["version"]
+dependencies = [
+    "appdirs~=1.4.4",
+    "briefcase~=0.3.14",
+    "wxpython==4.2.0",
+    "wxasync~=0.49",
+    "git-versioner>=6.0",
+]
+readme = "README.md"
+requires-python = ">= 3.8"
+
+#[tool.setuptools.dynamic]
+#version = {attr = "__version__.version_py_short"}
+
+[tool.setuptools]
+packages = ["wsl_usb_gui"]
+include-package-data = true
+
+[project.scripts]
+wsl-usb-gui = "wsl_usb_gui.gui:main"
+
+[tool.git-versioner]
+short = true
+
 [build-system]
-requires = ["setuptools", "setuptools-scm[toml]>=6.2"]
+requires = [ "setuptools>=41", "wheel", "git-versioner>=6.0"]
 build-backend = "setuptools.build_meta"
 
-[project]
-name = "wsl_usb_gui"
-authors = [
-    {name = "Andrew Leech", email = "andrew@alelec.net"},
+[tool.rye]
+managed = true
+dev-dependencies = [
+    "pyoxidizer~=0.24.0",
 ]
-description = "WSL USB Management Tool"
-dynamic = ["version"]
-
-[tool.setuptools_scm]
-#version_scheme = "wsl_usb_gui.version:version_scheme"
-
-[tool.poetry]
-name = "wsl-usb-gui"
-description = ""
-authors = ["Andrew Leech <andrew@alelec.net>"]
-license = "MIT"
-version = "3.4"
-
-[tool.poetry.dependencies]
-python = "^3.9"
-appdirs = "^1.4.4"
-setuptools-scm = "^6.4.2"
-briefcase = "^0.3.14"
-wxasync = "^0.49"
-wxpython = "^4.2.0"
-
-[tool.poetry.dev-dependencies]
-pip = "23.1.2"
-
-#[build-system]
-#requires = ["poetry-core>=1.0.0"]
-#build-backend = "poetry.core.masonry.api"
 
 [tool.briefcase]
 project_name = "wsl_usb_gui"
 bundle = "net.alelec.wsl-usb-gui"
-license = "MIT license"
-version = "3.4"
+license = "MIT"
+#version = "3.4"
 
 [tool.briefcase.app.wsl_usb_gui]
 formal_name = "WSL USB"
 description = "WSL USB Management Tool"
 sources = ['wsl_usb_gui']
 icon = "wsl_usb_gui/usb"
-requires = [
-    "appdirs==1.4.4",
-    "setuptools-scm==6.4.2"
-]

@@ -1,7 +1,7 @@
 stages:
   - build
   - release
- 
+
 #################################
 # Build the Windows MSI Installer
 #################################
@@ -11,12 +11,10 @@ build:
     - windows
     - windows-1809
   script:
-    # Install python
-    - choco install -y --no-progress python3 --version=3.9.2
-    # Ensure Pip is on the path
-    - $pydir = & py -3.9 -c "import sys,os;print(os.path.join(os.path.dirname(sys.executable),'Scripts'))"
-    - $Env:path += ";$pydir"
-    - Get-Command pip
+    # Install Rye
+    - wget https://github.com/mitsuhiko/rye/releases/download/0.1.2/rye-x86-windows.exe -UseBasicParsing -OutFile C:\WINDOWS\rye.exe
+
+    - rye sync
 
     # Install WIX Toolkit
     - wget https://github.com/wixtoolset/wix3/releases/download/wix311rtm/wix311-binaries.zip -UseBasicParsing -OutFile c:\wix311-binaries.zip
@@ -25,17 +23,16 @@ build:
     - $env:WIX="C:\\wix311\\"
     - $env:PYTHONIOENCODING="UTF-8"
 
-    # Build app  
+    # Build app
     # newer pip ignores setup.py, newer urllib3 conflicts with older poetry
-    - py -3.9 -m pip install -U pip==23.1.2 poetry==1.4.2
-    - py -3.9 -m poetry install
+    - $version = @(python -c 'import __version__;print(__version__.version_py_short)')
+    - rye run pyoxidizer build msi_installer --release --var version "$version"
 
-    - dir
-    - echo $env:CI_PROJECT_URL/-/raw/$env:CI_COMMIT_SHA/python-3.9.2-embed-amd64-tkinter.zip
-    - py -3.9 -m poetry run briefcase package windows
-    - dir windows
-    - copy-item windows\\*.msi .\\
-    - dir
+    # - dir
+    # - py -3.9 -m briefcase package windows
+    # - dir windows
+    - copy-item build\\x86_64-pc-windows-msvc\\release\\msi_installer\\*.msi .\\
+    # - dir
 
   artifacts:
     name: "WSL-USB-GUI-$CI_COMMIT_SHORT_SHA"
