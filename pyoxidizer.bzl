@@ -256,6 +256,10 @@ def make_exe():
     # policy's resource location attributes.
     #exe.add_python_resources(exe.pip_download(["pyflakes==2.2.0"]))
 
+    # Discover Python files from a virtualenv and add them to our embedded
+    # context.
+    exe.add_python_resources(exe.read_virtualenv(path=".venv"))
+
     # Invoke `pip install` with our Python distribution to install a single package.
     # `pip_install()` returns objects representing installed files.
     # `add_python_resources()` adds these objects to the binary, with a load
@@ -275,10 +279,6 @@ def make_exe():
     #    path="/src/mypackage",
     #    packages=["foo", "bar"],
     #))
-
-    # Discover Python files from a virtualenv and add them to our embedded
-    # context.
-    #exe.add_python_resources(exe.read_virtualenv(path="/path/to/venv"))
 
     # Filter all resources collected so far through a filter of names
     # in a file.
@@ -300,7 +300,7 @@ def make_install(exe):
 
     files.add_path(CWD + "/wsl_usb_gui/usb.ico", CWD + "/wsl_usb_gui")
 
-    files.add_path(CWD + "/usbipd-win_3.0.0.msi", CWD + "/")
+    files.add_path(CWD + "/usbipd-win_3.1.0.msi", CWD + "/")
 
     return files
 
@@ -324,17 +324,18 @@ def make_msi(exe):
     msi.product_icon_path = CWD + "/wsl_usb_gui/usb.ico"
 
     # This GUID matches the previous releases of WSL USB Gui
-    msi.upgrade_code = "{9127B276-BE9A-553E-8404-DFE622D57EEF}"
+    msi.upgrade_code = "C8A95889-BCF3-3B11-A0C1-CCF494753D99"
 
     msi.msi_filename = "WSL-USB-" + VARS.get("version") + ".msi"
 
-    msi.add_to_start_menu = exe.name
+    msi.add_to_start_menu = True
 
     msi.add_to_path = False
+    msi.per_user_install = True
 
     files = FileManifest()
     files.add_path(CWD + "/wsl_usb_gui/usb.ico", CWD + "/wsl_usb_gui")
-    files.add_path(CWD + "/usbipd-win_3.0.0.msi", CWD + "/")
+    files.add_path(CWD + "/usbipd-win_3.1.0.msi", CWD + "/")
     msi.add_program_files_manifest(files)
 
     return msi

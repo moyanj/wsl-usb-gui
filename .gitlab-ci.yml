@@ -12,9 +12,11 @@ build:
     - windows-1809
   script:
     # Install Rye
-    - wget https://github.com/mitsuhiko/rye/releases/download/0.1.2/rye-x86-windows.exe -UseBasicParsing -OutFile C:\WINDOWS\rye.exe
+    - wget https://github.com/mitsuhiko/rye/releases/download/0.11.0/rye-x86_64-windows.exe -UseBasicParsing -OutFile rye.exe
+    - $env:path += ";."
 
     - rye sync
+    - rye run python -m __version__ --python --short --save
 
     # Install WIX Toolkit
     - wget https://github.com/wixtoolset/wix3/releases/download/wix311rtm/wix311-binaries.zip -UseBasicParsing -OutFile c:\wix311-binaries.zip
@@ -25,19 +27,16 @@ build:
 
     # Build app
     # newer pip ignores setup.py, newer urllib3 conflicts with older poetry
-    - $version = @(python -c 'import __version__;print(__version__.version_py_short)')
-    - rye run pyoxidizer build msi_installer --release --var version "$version"
+    - $version = @(rye run python -m __version__ --python --short)
+    - .\pyoxidizer.exe build msi_installer --release --var version "$version"
 
-    # - dir
-    # - py -3.9 -m briefcase package windows
-    # - dir windows
     - copy-item build\\x86_64-pc-windows-msvc\\release\\msi_installer\\*.msi .\\
     # - dir
 
   artifacts:
     name: "WSL-USB-GUI-$CI_COMMIT_SHORT_SHA"
     paths:
-      - .\\*.msi
+      - .\\WSL*.msi
     expire_in: 3 days
 
 
