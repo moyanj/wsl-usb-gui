@@ -26,18 +26,37 @@ build:
     - $env:PYTHONIOENCODING="UTF-8"
 
     # Build app
-    # newer pip ignores setup.py, newer urllib3 conflicts with older poetry
     - $version = @(rye run python -m __version__ --python --short)
     - .\pyoxidizer.exe build msi_installer --release --var version "$version"
 
     - copy-item build\\x86_64-pc-windows-msvc\\release\\msi_installer\\*.msi .\\
-    # - dir
 
   artifacts:
     name: "WSL-USB-GUI-$CI_COMMIT_SHORT_SHA"
     paths:
       - .\\WSL*.msi
-    expire_in: 3 days
+    expire_in: 1 week
+  except:
+    - tags
+
+
+release this commit:
+  when: manual
+  stage: release
+  image: python:3
+  only: [main]
+  before_script:
+    - git config --global user.email "$GITLAB_USER_EMAIL"
+    - git config --global user.name "$GITLAB_USER_NAME"
+  script:
+    - pip install git-versioner
+    - git status
+    - git reset --hard HEAD
+    - git-versioner --tag
+    # ensure git lfs hook doesn't block push
+    - rm .git/hooks/pre-push
+    # Requires maintainer write_repository project access token in protected env var: GIT_TOKEN
+    - git push --tags https://root:$GIT_TOKEN@$CI_SERVER_HOST/$CI_PROJECT_PATH.git HEAD:main
 
 
 ########################################################################
@@ -50,7 +69,10 @@ publish:
     GIT_STRATEGY: none
     GIT_SUBMODULE_STRATEGY: none
   script:
-    - pip3 install gitlab-release
+    - pip install -U gitlab-release gitlab-download-artifacts
+
+    - gitlab-download-artifacts "${CI_PROJECT_URL}@${CI_COMMIT_SHORT_SHA}" build
+
     - for f in ./*.msi; do mv "$f" "${f// /-}"; done
     - gitlab-release ./*.msi
   only:
