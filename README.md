@@ -5,13 +5,13 @@ Behind the scenes it's simply a wrapper for the official command line tools to p
 For more information, see:  https://devblogs.microsoft.com/commandline/connecting-usb-devices-to-wsl/
 
 These command line tools are based on an open source project called USBIP which is a cross platform solution for sharing USB devices over any network connection.
-It's uses server software running on the OS where USB devices are directly connected (in this case windows), then a matching client software running on the OS where the USB devices are to be used (wsl/linux).
+It uses server software running on the OS where USB devices are directly connected (in this case windows), then a matching client software running on the OS where the USB devices are to be used (wsl/linux).
 
 ## Installation
 
 The latest installer is always available on [the releases page](https://gitlab.com/alelec/wsl-usb-gui/-/releases).
 
-The installation of dependencies should be handled automatically at the end of the MSI installer. 
+The installation of dependencies and configuration of WSL should be handled automatically when you first run the application. 
 
 If any error occur here though, or the program doesn't appear to run correctly, a log of the install process can be viewed by hitting `Win`-`R` on the keyboard and copy/paste in: `notepad %APPDATA%\..\local\wsl-usb-gui\install.log`  
 Alternatively, it may help to run through the dependency install steps manually as described below. 
