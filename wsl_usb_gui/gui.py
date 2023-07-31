@@ -802,7 +802,7 @@ class popupAutoAttach(wx.Dialog):
         super().__init__(parent, title="New Auto-Attach Profile")
 
         if icon:
-            self.SetIcon(str(icon))
+            self.SetIcon(icon)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
 
