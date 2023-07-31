@@ -70,10 +70,7 @@ publish:
     GIT_SUBMODULE_STRATEGY: none
   script:
     - pip install -U gitlab-release gitlab-download-artifacts
-
     - gitlab-download-artifacts "${CI_PROJECT_URL}@${CI_COMMIT_SHORT_SHA}" build
-
-    - for f in ./*.msi; do mv "$f" "${f// /-}"; done
     - gitlab-release ./*.msi
   only:
     - tags
