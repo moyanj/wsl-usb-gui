@@ -477,7 +477,8 @@ class WslUsbGui(wx.Frame):
             return  # no selected item
         device = self.pinned_listbox.devices[selection]
         self.pinned_listbox.DeleteItem(selection)
-        self.remove_pinned_profile(device.BusId, device.Description, device.InstanceId)
+        busid, description, instanceid = device # type: ignore
+        self.remove_pinned_profile(busid, description, instanceid)
         self.save_config()
 
     def get_selection(self, available=False, attached=False) -> Optional[Device]:
