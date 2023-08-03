@@ -1,7 +1,7 @@
 import appdirs
 import asyncio
-import importlib.resources
 import json
+import re
 import subprocess
 import sys
 import time
@@ -189,9 +189,10 @@ class WslUsbGui(wx.Frame):
         def attached_menu(event):
             popupmenu = wx.Menu()
             entries = [
-                ("Detach from WSL", self.detach_wsl),
+                ("Detach Device", self.detach_wsl),
                 ("Auto-Attach Device", self.auto_attach_wsl),
                 ("Rename Device", self.rename_device),
+                ("WSL: Grant User Permissions", self.udev_permissive),
             ]
             for entry, fn in entries:
                 menuItem = popupmenu.Append(-1, entry)
@@ -495,8 +496,8 @@ class WslUsbGui(wx.Frame):
                 return self.attached_listbox.devices[item]
         return None
 
-    def rename_device(self, event=None):
-        selection = self.get_selection()
+    def get_selected_device(self, available=False, attached=False):
+        selection = self.get_selection(available, attached)
         if not selection:
             print("no selection to rename")
             return
@@ -506,10 +507,16 @@ class WslUsbGui(wx.Frame):
             for d in self.usb_devices
             if d.BusId == selection.BusId and d.Description == selection.Description
         ][0]
+        return device
+
+    def rename_device(self, event=None):
+        device = self.get_selected_device
+        if not device:
+            return
 
         instanceId = device.InstanceId
 
-        current = self.name_mapping.get(instanceId, selection.Description)
+        current = self.name_mapping.get(instanceId, device.Description)
         caption = "Rename"
         message = f"Enter new label for port: {device.BusId}\nOr leave blank to reset to default."
         dlg = wx.TextEntryDialog(self, message, caption, current)
@@ -530,6 +537,36 @@ class WslUsbGui(wx.Frame):
                 pass
         self.save_config()
         self.refresh()
+
+    def udev_permissive(self, event=None):
+        device = self.get_selected_device()
+        if not device:
+            return
+
+        try:
+            vid = re.search("vid_([0-9a-f]+)&", device.InstanceId.lower()).group(1)
+            pid = re.search("pid_([0-9a-f]+)\\\\", device.InstanceId.lower()).group(1)
+            udev_rule = f'SUBSYSTEM=="usb", ATTRS{{idVendor}}=="{vid}", ATTRS{{idProduct}}=="{pid}", MODE="0666"'
+            rules_file = '/etc/udev/rules.d/99-wsl-usb-gui.rules'
+            udev_settings = run(
+                [
+                    "wsl",
+                    "--user",
+                    "root",
+                    "sh",
+                    "-c",
+                    f"grep -q '{udev_rule}' {rules_file} || (echo '{udev_rule}' >> {rules_file}; sudo udevadm control --reload-rules; sudo udevadm trigger)",
+                ]
+            ).stdout.strip()
+            print(f"udev rule added: {udev_rule}")
+            wx.MessageBox(
+                caption="WSL: Grant User Permissions", message=f"WSL udev rule added for VID:{vid} PID:{pid}.", style=wx.OK | wx.ICON_INFORMATION
+            )
+        except AttributeError as ex:
+            print("Could not get device information for udev: ", ex)
+            wx.MessageBox(
+                caption="WSL: Grant User Permissions", message=f"ERROR: Failed to add udev rule.", style=wx.OK | wx.ICON_WARNING
+            )
 
     async def refresh_task(self, delay=0):
         if delay:
