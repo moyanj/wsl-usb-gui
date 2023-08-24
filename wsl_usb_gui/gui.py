@@ -95,6 +95,7 @@ class WslUsbGui(wx.Frame):
         self.usb_devices: Set[Device] = set()
         self.pinned_profiles: List[Profile] = []
         self.name_mapping = dict()
+        self.refreshing = False
 
         headingFont = wx.Font(
             16, wx.FONTFAMILY_DECORATIVE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD
@@ -569,40 +570,46 @@ class WslUsbGui(wx.Frame):
             )
 
     async def refresh_task(self, delay=0):
-        if delay:
-            await asyncio.sleep(delay)
+        try:
+            if self.refreshing:
+                return
+            self.refreshing = True
+            if delay:
+                await asyncio.sleep(delay)
 
-        print("Refresh USB")
+            print("Refresh USB")
 
-        usb_devices = set(
-            await asyncio.get_running_loop().run_in_executor(None, self.list_wsl_usb)
-        )
+            usb_devices = set(
+                await asyncio.get_running_loop().run_in_executor(None, self.list_wsl_usb)
+            )
 
-        new_devices = usb_devices - self.usb_devices
-        self.usb_devices = usb_devices
+            new_devices = usb_devices - self.usb_devices
+            self.usb_devices = usb_devices
 
-        if not self.usb_devices:
-            return
+            if not self.usb_devices:
+                return
 
-        self.attached_listbox.DeleteAllItems()
-        self.available_listbox.DeleteAllItems()
-        for device in sorted(self.usb_devices, key=lambda d: d.BusId):
-            new = device in new_devices
-            if device.Attached:
-                row = self.attached_listbox.Append(device)
-                if new:
-                    self.attached_listbox.HighlightRow(row)
-            else:
-                if self.attach_if_pinned(device):
+            self.attached_listbox.DeleteAllItems()
+            self.available_listbox.DeleteAllItems()
+            for device in sorted(self.usb_devices, key=lambda d: d.BusId):
+                new = device in new_devices
+                if device.Attached:
                     row = self.attached_listbox.Append(device)
                     if new:
                         self.attached_listbox.HighlightRow(row)
                 else:
-                    row = self.available_listbox.Append(device)
-                    if new:
-                        self.available_listbox.HighlightRow(row)
+                    if self.attach_if_pinned(device):
+                        row = self.attached_listbox.Append(device)
+                        if new:
+                            self.attached_listbox.HighlightRow(row)
+                    else:
+                        row = self.available_listbox.Append(device)
+                        if new:
+                            self.available_listbox.HighlightRow(row)
 
-        self.update_pinned_listbox()
+            self.update_pinned_listbox()
+        finally:
+            self.refreshing = False
 
     def highlight_row(self, listbox: "ListCtrl", row: int):
         pass
