@@ -110,18 +110,17 @@ def check_kernel_version():
             raise SystemExit(ex)
     return False
 
+def wsl_sudo_run(command):
+    return run(["wsl", "--user", "root", "bash", "-c", command]).stdout.strip().decode()
+
 
 def install_client():
     try:
         logging.info("Installing WSL client tools:")
-        cmd = (
-            "apt install -y linux-tools-generic hwdata &&"
-            "latest=$(ls -vr1 /usr/lib/linux-tools/*/usbip | head -1) &&"
-            "echo \"${latest}\" &&"
-            "update-alternatives --verbose --install /usr/local/bin/usbip usbip \"${latest}\" 20"
-        )
-        rsp = run(["wsl", "--user", "root", "bash", "-c", cmd]).stdout.strip()
-        logging.info(rsp.decode())
+        logging.info(wsl_sudo_run("apt install -y linux-tools-generic hwdata"))
+        latest = wsl_sudo_run("ls -vr1 /usr/lib/linux-tools/*/usbip | head -1")
+        logging.info(f"Latest version installed: {latest}")
+        logging.info(wsl_sudo_run(f"update-alternatives --verbose --install /usr/local/bin/usbip usbip \"{latest}\" 20"))
         return True
     except Exception as ex:
         logging.exception(ex)
