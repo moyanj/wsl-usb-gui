@@ -25,6 +25,7 @@ from .usb_monitor import registerDeviceNotification, unregisterDeviceNotificatio
 
 # High DPI Support.
 import ctypes
+
 try:
     ctypes.windll.shcore.SetProcessDpiAwareness(True)
 except:
@@ -101,7 +102,6 @@ class WslUsbGui(wx.Frame):
             16, wx.FONTFAMILY_DECORATIVE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD
         )
 
-
         ## TOP SECTION - Available USB Devices
 
         top_panel = wx.Panel(splitter_top, style=wx.SUNKEN_BORDER)
@@ -159,7 +159,6 @@ class WslUsbGui(wx.Frame):
 
         top_sizer.Add(top_controls, flag=wx.EXPAND | wx.ALL, border=6)
         top_sizer.Add(self.available_listbox, proportion=1, flag=wx.EXPAND | wx.ALL, border=6)
-
 
         ## MIDDLE SECTION - USB devices currently attached
 
@@ -221,7 +220,6 @@ class WslUsbGui(wx.Frame):
         middle_sizer.Add(middle_controls, flag=wx.EXPAND | wx.ALL, border=6)
         middle_sizer.Add(self.attached_listbox, proportion=1, flag=wx.EXPAND | wx.ALL, border=6)
 
-
         ## BOTTOM SECTION - saved profiles for auto-attach
 
         bottom_panel = wx.Panel(splitter_bottom, style=wx.SUNKEN_BORDER)
@@ -260,7 +258,6 @@ class WslUsbGui(wx.Frame):
 
         bottom_sizer.Add(bottom_controls, flag=wx.EXPAND | wx.ALL, border=6)
         bottom_sizer.Add(self.pinned_listbox, proportion=1, flag=wx.EXPAND | wx.ALL, border=6)
-
 
         ## Window Configure
 
@@ -303,7 +300,6 @@ class WslUsbGui(wx.Frame):
         key = f"_menu_{label.replace(' ', '_')}"
         return label
 
-
     @staticmethod
     def create_profile(busid, description, instanceid):
         return Profile(*(None if a == "None" else a for a in (busid, description, instanceid)))
@@ -343,11 +339,7 @@ class WslUsbGui(wx.Frame):
                 bind = True if device["PersistedGuid"] else False
                 forced = True if device["IsForced"] else False
                 attached = device["ClientIPAddress"]
-                rows.append(
-                    Device(
-                        str(bus_info), description, bind, forced, instanceId, attached
-                    )
-                )
+                rows.append(Device(str(bus_info), description, bind, forced, instanceId, attached))
         return rows
 
     def deselect_other_treeviews(self, *args, treeview: UltimateListCtrl):
@@ -479,7 +471,7 @@ class WslUsbGui(wx.Frame):
             return  # no selected item
         device = self.pinned_listbox.devices[selection]
         self.pinned_listbox.DeleteItem(selection)
-        busid, description, instanceid = device # type: ignore
+        busid, description, instanceid = device  # type: ignore
         self.remove_pinned_profile(busid, description, instanceid)
         self.save_config()
 
@@ -548,7 +540,7 @@ class WslUsbGui(wx.Frame):
             vid = re.search("vid_([0-9a-f]+)&", device.InstanceId.lower()).group(1)
             pid = re.search("pid_([0-9a-f]+)\\\\", device.InstanceId.lower()).group(1)
             udev_rule = f'SUBSYSTEM=="usb", ATTRS{{idVendor}}=="{vid}", ATTRS{{idProduct}}=="{pid}", MODE="0666"'
-            rules_file = '/etc/udev/rules.d/99-wsl-usb-gui.rules'
+            rules_file = "/etc/udev/rules.d/99-wsl-usb-gui.rules"
             udev_settings = run(
                 [
                     "wsl",
@@ -561,12 +553,16 @@ class WslUsbGui(wx.Frame):
             ).stdout.strip()
             print(f"udev rule added: {udev_rule}")
             wx.MessageBox(
-                caption="WSL: Grant User Permissions", message=f"WSL udev rule added for VID:{vid} PID:{pid}.", style=wx.OK | wx.ICON_INFORMATION
+                caption="WSL: Grant User Permissions",
+                message=f"WSL udev rule added for VID:{vid} PID:{pid}.",
+                style=wx.OK | wx.ICON_INFORMATION,
             )
         except AttributeError as ex:
             print("Could not get device information for udev: ", ex)
             wx.MessageBox(
-                caption="WSL: Grant User Permissions", message=f"ERROR: Failed to add udev rule.", style=wx.OK | wx.ICON_WARNING
+                caption="WSL: Grant User Permissions",
+                message=f"ERROR: Failed to add udev rule.",
+                style=wx.OK | wx.ICON_WARNING,
             )
 
     async def refresh_task(self, delay=0):
@@ -712,7 +708,9 @@ class WslUsbGui(wx.Frame):
             print("no selection to create profile for")
             return
 
-        popup = popupAutoAttach(self, device.BusId, device.Description, device.InstanceId, self.icon)
+        popup = popupAutoAttach(
+            self, device.BusId, device.Description, device.InstanceId, self.icon
+        )
         popup.ShowModal()
 
         self.refresh()
@@ -733,9 +731,7 @@ class ListCtrl(UltimateListCtrl):
     def InsertColumns(self, names):
         for i, name in enumerate(names):
             info = UltimateListItem()
-            info._mask = (
-                wx.LIST_MASK_TEXT
-            )
+            info._mask = wx.LIST_MASK_TEXT
             info._image = []
             info._format = 0
             info._kind = 1
