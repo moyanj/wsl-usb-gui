@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import *
 
 import wx
+import wx.adv
 import wxasync
 from wx.lib.agw.ultimatelistctrl import (
     UltimateListCtrl,
@@ -37,7 +38,8 @@ ATTACHED_COLUMNS = ["bus_id", "description", "forced"]  # , "client"]
 PROFILES_COLUMNS = ["bus_id", "description"]
 
 USBIPD_PORT = 3240
-APP_DIR = Path(appdirs.user_data_dir("wsl-usb-gui", ""))
+APP_DIR = Path(appdirs.user_data_dir("wsl-usb-gui", False))
+APP_DIR.mkdir(exist_ok=True)
 CONFIG_FILE = APP_DIR / "config.json"
 
 Device = namedtuple("Device", "BusId Description bound forced InstanceId Attached")
@@ -85,6 +87,8 @@ class WslUsbGui(wx.Frame):
         if self.icon:
             self.SetIcon(self.icon)
 
+        self.Bind(wx.EVT_CLOSE, self.OnClose)
+
         splitter_bottom = ProportionalSplitter(self, proportion=0.66, style=wx.SP_LIVE_UPDATE)
         splitter_top = ProportionalSplitter(
             splitter_bottom, proportion=0.33, style=wx.SP_LIVE_UPDATE
@@ -92,6 +96,9 @@ class WslUsbGui(wx.Frame):
 
         splitter_top.SetMinimumPaneSize(6)
         splitter_bottom.SetMinimumPaneSize(6)
+
+        # On first close, alert the user it's being minimised to tray
+        self.informed_about_tray = False
 
         self.usb_devices: Set[Device] = set()
         self.pinned_profiles: List[Profile] = []
@@ -296,9 +303,21 @@ class WslUsbGui(wx.Frame):
         self.Bind(wx.EVT_BUTTON, lambda event: command(), btn)
         return btn
 
-    def Menu(self, label, command):
-        key = f"_menu_{label.replace(' ', '_')}"
-        return label
+    def OnClose(self, event):
+        if event.CanVeto():
+            if not self.informed_about_tray:
+                wx.MessageBox(
+                    caption="Minimising to tray", message=f"This will stay running in background.\nCan be restored/exited from system tray icon.", style=wx.OK | wx.ICON_INFORMATION
+                )
+                self.informed_about_tray = True
+                self.save_config()
+
+            # Hide the window instead of closing it
+            self.Hide()
+            event.Veto()
+        else:
+            event.Skip()
+            self.Destroy()
 
     @staticmethod
     def create_profile(busid, description, instanceid):
@@ -313,6 +332,7 @@ class WslUsbGui(wx.Frame):
             else:
                 self.pinned_profiles = [self.create_profile(*c) for c in config["pinned_profiles"]]
                 self.name_mapping = config["name_mapping"]
+                self.informed_about_tray = config.get("informed_about_tray", False)
 
         except Exception as ex:
             pass
@@ -321,6 +341,7 @@ class WslUsbGui(wx.Frame):
         config = dict(
             pinned_profiles=self.pinned_profiles,
             name_mapping=self.name_mapping,
+            informed_about_tray=self.informed_about_tray,
         )
         CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
         CONFIG_FILE.write_text(json.dumps(config, indent=4, sort_keys=True))
@@ -565,7 +586,7 @@ class WslUsbGui(wx.Frame):
                 style=wx.OK | wx.ICON_WARNING,
             )
 
-    async def refresh_task(self, delay=0):
+    async def refresh_task(self, delay: float = 0):
         try:
             if self.refreshing:
                 return
@@ -934,12 +955,60 @@ def _install_deps():
                 gui.refresh()
 
 
+class TaskBarIcon(wx.adv.TaskBarIcon):
+    def __init__(self, frame, icon):
+        super(TaskBarIcon, self).__init__()
+
+        self.frame = frame
+
+        # Set the icon for the system tray
+        if icon:
+            self.SetIcon(icon)
+
+        # Bind the left-click event to the OnLeftClick function
+        self.Bind(wx.adv.EVT_TASKBAR_LEFT_DOWN, self.OnLeftClick)
+
+    def CreatePopupMenu(self):
+        menu = wx.Menu()
+
+        # Add an option to restore the window when clicked
+        restore = menu.Append(wx.ID_ANY, 'Restore')
+        self.Bind(wx.EVT_MENU, self.OnRestore, restore)
+
+        # Add an option to exit the application when clicked
+        exit_app = menu.Append(wx.ID_EXIT, 'Exit')
+        self.Bind(wx.EVT_MENU, self.OnExit, exit_app)
+
+        return menu
+
+    def OnLeftClick(self, event=None):
+        self.OnRestore()
+
+    def OnRestore(self, event=None):
+        self.frame.Show()
+        self.frame.Restore()
+        self.frame.Raise()
+
+    def OnExit(self, event):
+        wx.CallAfter(self.frame.Close, True)
+        self.RemoveIcon()
+        self.Destroy()
+
+
+
 async def amain():
     global gui
 
     app = wxasync.WxAsyncApp(False)
+
+    instance = wx.SingleInstanceChecker(f"wsl_usb_gui_{wx.GetUserId()}", str(APP_DIR.resolve()))
+    if instance.IsAnotherRunning():
+        wx.MessageBox(caption="Already running", message="Another instance of the app is already running,\ncheck system tray icon to restore instance.", style=wx.OK | wx.ICON_WARNING)
+        return
+
     gui = WslUsbGui()
     app.SetTopWindow(gui)
+    taskbar = TaskBarIcon(gui, gui.icon)
 
     # TODO
     devNotifyHandle = registerDeviceNotification(handle=gui.GetHandle(), callback=usb_callback)
