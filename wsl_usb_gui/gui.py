@@ -22,6 +22,7 @@ from wx.lib.agw.ultimatelistctrl import (
     EVT_LIST_ITEM_CHECKED,
 )
 
+from .version import __version__
 from .usb_monitor import registerDeviceNotification, unregisterDeviceNotification
 
 # High DPI Support.
@@ -80,7 +81,7 @@ def get_icon():
 
 class WslUsbGui(wx.Frame):
     def __init__(self):
-        wx.Frame.__init__(self, None, title="WSL USB Manager")
+        wx.Frame.__init__(self, None, title=f"WSL USB Manager {__version__}")
 
         self.icon = get_icon()
 
