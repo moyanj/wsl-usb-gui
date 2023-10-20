@@ -299,8 +299,7 @@ def make_install(exe):
     files.add_python_resource(".", exe)
 
     files.add_path(CWD + "/wsl_usb_gui/usb.ico", CWD + "/wsl_usb_gui")
-
-    files.add_path(CWD + "/usbipd-win_3.1.0.msi", CWD + "/")
+    files.add_path(CWD + "/usbipd-win_3.2.0.msi", CWD + "/")
 
     return files
 
@@ -335,7 +334,7 @@ def make_msi(exe):
 
     files = FileManifest()
     files.add_path(CWD + "/wsl_usb_gui/usb.ico", CWD + "/wsl_usb_gui")
-    files.add_path(CWD + "/usbipd-win_3.1.0.msi", CWD + "/")
+    files.add_path(CWD + "/usbipd-win_3.2.0.msi", CWD + "/")
     msi.add_program_files_manifest(files)
 
     return msi
