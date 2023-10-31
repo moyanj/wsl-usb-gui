@@ -525,7 +525,7 @@ class WslUsbGui(wx.Frame):
         return device
 
     def rename_device(self, event=None):
-        device = self.get_selected_device
+        device = self.get_selected_device()
         if not device:
             return
 
