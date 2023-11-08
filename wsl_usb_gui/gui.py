@@ -626,6 +626,8 @@ class WslUsbGui(wx.Frame):
                             self.available_listbox.HighlightRow(row)
 
             self.update_pinned_listbox()
+            if new_devices:
+                self.RequestUserAttention()
         finally:
             self.refreshing = False
 
