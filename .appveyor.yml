@@ -1,0 +1,14 @@
+# Build worker image (VM template)
+image: Visual Studio 2022
+
+# Placeholder version, will be updated later in script.
+version: '{build}'
+
+# scripts that run after cloning repository
+build_script:
+  - ps: .\build_msi.ps1
+
+artifacts:
+  #- path: build
+  - path: 'WSL-USB*.msi'
+
