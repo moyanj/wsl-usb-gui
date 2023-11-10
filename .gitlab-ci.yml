@@ -2,24 +2,25 @@ stages:
   - build
   - release
 
-#################################
+###########################################
 # Build the Windows MSI Installer
-#################################
-build:
-  stage: build
-  tags:
-    - windows
-    - windows-1809
-  script:
-    - .\build_msi.ps1
+# Moved to AppVeyor to support code-signing
+###########################################
+# build:
+#   stage: build
+#   tags:
+#     - windows
+#     - windows-1809
+#   script:
+#     - .\build_msi.ps1
 
-  artifacts:
-    name: "WSL-USB-GUI-$CI_COMMIT_SHORT_SHA"
-    paths:
-      - .\\WSL*.msi
-    expire_in: 1 week
-  except:
-    - tags
+#   artifacts:
+#     name: "WSL-USB-GUI-$CI_COMMIT_SHORT_SHA"
+#     paths:
+#       - .\\WSL*.msi
+#     expire_in: 1 week
+#   except:
+#     - tags
 
 
 release this commit:
@@ -50,14 +51,24 @@ publish:
   variables:
     GIT_STRATEGY: none
     GIT_SUBMODULE_STRATEGY: none
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "trigger"
   script:
-    - pip install -U gitlab-release gitlab-download-artifacts
-    - gitlab-download-artifacts "${CI_PROJECT_URL}@${CI_COMMIT_SHORT_SHA}" build
-    - gitlab-release ./*.msi
-  only:
-    - tags
+    - echo ${TRIGGER_PAYLOAD}
+    - cat ${TRIGGER_PAYLOAD}
+
+    - ORG_ID=$(python -c 'import json;j=json.load(open("'${TRIGGER_PAYLOAD}'"));print(j["OrganizationId"])')
+    - SR_ID=$(python -c 'import json;j=json.load(open("'${TRIGGER_PAYLOAD}'"));print(j["SigningRequestId"])')
+
+    - echo $ORG_ID $SR_ID
+
+    - curl -H "Authorization:"" Bearer ${SP_TOKEN}" -O -J https://app.signpath.io/API/v1/${ORG_ID}/SigningRequests/${SR_ID}/SignedArtifact
+
+    - pip install -U gitlab-release
+    - if [ -n "${CI_COMMIT_TAG}" ]; then gitlab-release ./*.msi; fi
+
   artifacts:
-    name: "WSL-USB-GUI-${CI_COMMIT_TAG}"
+    name: "WSL-USB-GUI-${CI_COMMIT_TAG:-${CI_COMMIT_SHORT_SHA}}"
     expire_in: never
     paths:
       - ./*.msi

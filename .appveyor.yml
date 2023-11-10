@@ -9,6 +9,12 @@ build_script:
   - ps: .\build_msi.ps1
 
 artifacts:
-  #- path: build
   - path: 'WSL-USB*.msi'
 
+deploy:
+- provider: Webhook
+  url: https://app.signpath.io/API/v1/2d13e241-c0f6-4b72-9ada-d36f0ad9cdd4/Integrations/AppVeyor?ProjectSlug=WSL-USB-GUI&SigningPolicySlug=release-signing&ArtifactConfigurationSlug=wsl-usb-gui-msi
+  authorization:
+     secure: +fjut0b7XbalPv1U3bZ0A9OyDPHLac8ybbSDQmXxduAjnbWX/8ojdxS6Df7wSyx6oR5UMKUlmtCOFTMuCMBHJg==
+  on:
+    APPVEYOR_REPO_TAG: true # keep casing this way for Linux builds where variables are case-sensitive
