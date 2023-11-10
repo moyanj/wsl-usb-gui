@@ -114,6 +114,16 @@ Note: If you are using a third-party firewall, you may have to reconfigure it to
 At this point you should probably reboot your computer, then you can use this tool to manage your USB devices.
 
 
+## Code signing policy
+
+As of WSL USB GUI v5.0 the msi installer is code-signed, with the automated signing backend graciously provided by SignPath.io with certificate provided by SignPath Foundation OSS program.
+
+This program will not transfer any information to other networked systems. The application does not include any telemetry or similar network communications.
+
+Installations of WSL-USB-GUI include a copy of usbipd-win msi as downloaded from https://github.com/dorssel/usbipd-win/releases
+These are not modified in any way and are code-signed by the original author of this program.
+
+
 ## Credits
 All the hard work to get USB devices working in WSL is thanks to USBIP and in particular usbipd-win : https://github.com/dorssel/usbipd-win
 
