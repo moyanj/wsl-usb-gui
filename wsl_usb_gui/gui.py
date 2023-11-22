@@ -587,6 +587,10 @@ class WslUsbGui(wx.Frame):
                 style=wx.OK | wx.ICON_WARNING,
             )
 
+    @staticmethod
+    def window_is_focussed():
+        return wx.GetActiveWindow() is not None
+
     async def refresh_task(self, delay: float = 0):
         try:
             if self.refreshing:
@@ -601,7 +605,11 @@ class WslUsbGui(wx.Frame):
                 await asyncio.get_running_loop().run_in_executor(None, self.list_wsl_usb)
             )
 
-            new_devices = usb_devices - self.usb_devices
+            new_devices = []
+            if self.usb_devices:
+                # Don't report new device on first run at startup.
+                new_devices = usb_devices - self.usb_devices
+
             self.usb_devices = usb_devices
 
             if not self.usb_devices:
@@ -612,27 +620,18 @@ class WslUsbGui(wx.Frame):
             for device in sorted(self.usb_devices, key=lambda d: d.BusId):
                 new = device in new_devices
                 if device.Attached:
-                    row = self.attached_listbox.Append(device)
-                    if new:
-                        self.attached_listbox.HighlightRow(row)
+                    self.attached_listbox.Append(device, highlight=new)
                 else:
                     if self.attach_if_pinned(device):
-                        row = self.attached_listbox.Append(device)
-                        if new:
-                            self.attached_listbox.HighlightRow(row)
+                        self.attached_listbox.Append(device, highlight=new)
                     else:
-                        row = self.available_listbox.Append(device)
-                        if new:
-                            self.available_listbox.HighlightRow(row)
+                        self.available_listbox.Append(device, highlight=new)
 
             self.update_pinned_listbox()
-            if new_devices:
+            if new_devices and not self.window_is_focussed():
                 self.RequestUserAttention()
         finally:
             self.refreshing = False
-
-    def highlight_row(self, listbox: "ListCtrl", row: int):
-        pass
 
     def refresh(self, delay=0.0):
         asyncio.get_running_loop().call_soon_threadsafe(
@@ -693,8 +692,7 @@ class WslUsbGui(wx.Frame):
         print(f"Bind (forced) {bus_id}")
         result = self.bind_bus_id(bus_id, forced=True)
         print(f"Bind (forced) {bus_id}: {'Success' if not result.returncode else 'Failed'}")
-        self.refresh()
-        self.refresh()
+        self.refresh(delay=2)
 
     def bind(self, event=None):
         bus_id = self._attach_selection_busid()
@@ -709,7 +707,7 @@ class WslUsbGui(wx.Frame):
         result = self.attach_wsl_usb(bus_id)
         print(f"Attach {bus_id}: {'Success' if not result.returncode else 'Failed'}")
         time.sleep(0.5)
-        self.refresh()
+        self.refresh(delay=2)
 
     def detach_wsl(self, event=None):
         device = self.get_selection(attached=True)
@@ -721,9 +719,7 @@ class WslUsbGui(wx.Frame):
         self.remove_pinned_profile(device.BusId, device.Description, device.InstanceId)
 
         self.detach_wsl_usb(device.BusId)
-
-        time.sleep(0.5)
-        self.refresh()
+        self.refresh(delay=2)
 
     def auto_attach_wsl(self, event=None):
         global pop
@@ -736,8 +732,7 @@ class WslUsbGui(wx.Frame):
             self, device.BusId, device.Description, device.InstanceId, self.icon
         )
         popup.ShowModal()
-
-        self.refresh()
+        self.refresh(delay=2)
 
 
 class ListCtrl(UltimateListCtrl):
@@ -747,10 +742,42 @@ class ListCtrl(UltimateListCtrl):
         self.devices: List[Device] = []
         self.columns = []
 
-    def HighlightRow(self, index):
+    def IsVisible(self):
+        cdc = wx.ClientDC(self)
+        # Check some points inside the widget to determine if
+        # this window is visible at those points
+        widget_size = cdc.Size
+        offset = 16
+        widget_size.DecBy(offset)
+        top_left = self.ClientToScreen((offset, offset))
+        bottom_left = self.ClientToScreen((offset, widget_size.height))
+        bottom_right = self.ClientToScreen(widget_size)
+        tl_visible = wx.FindWindowAtPoint(top_left) is not None
+        bl_visible = wx.FindWindowAtPoint(bottom_left) is not None
+        br_visible = wx.FindWindowAtPoint(bottom_right) is not None
+        return (tl_visible and bl_visible) or (tl_visible and br_visible)
+
+    def HighlightRowReset(self, device, reset):
+        try:
+            row = self.devices.index(device)
+            self.SetItemBackgroundColour(row, reset)
+        except ValueError:
+            pass  # device has likely been unplugged
+
+    def HighlightRowMaintain(self, device, reset):
+        if self.IsVisible():
+            wx.CallLater(2000, self.HighlightRowReset, device, reset)
+        else:
+            wx.CallLater(1000, self.HighlightRowMaintain, device, reset)
+
+    def HighlightRow(self, device, index):
         original = self.GetItemBackgroundColour(index)
+        self.EnsureVisible(index)  # scroll into view if needed
         self.SetItemBackgroundColour(index, wx.YELLOW)
-        wx.CallLater(2000, self.SetItemBackgroundColour, index, original)
+        if self.IsVisible():
+            wx.CallLater(2000, self.HighlightRowReset, device, original)
+        else:
+            wx.CallLater(1000, self.HighlightRowMaintain, device, original)
 
     def InsertColumns(self, names):
         for i, name in enumerate(names):
@@ -773,7 +800,7 @@ class ListCtrl(UltimateListCtrl):
         UltimateListCtrl.DeleteAllItems(self)
         self.devices.clear()
 
-    def Append(self, device):
+    def Append(self, device, highlight=False):
         details = device[0 : UltimateListCtrl.GetColumnCount(self)]
 
         pos = self.GetItemCount()
@@ -798,6 +825,8 @@ class ListCtrl(UltimateListCtrl):
         self.devices.append(device)
         if len(self.devices) != pos + 1:
             raise ValueError(f"{self} devices out of sync")
+        if highlight:
+            self.HighlightRow(device, pos)
         return pos
 
 
@@ -927,7 +956,7 @@ def usb_callback(attach):
     else:
         print(f"USB device detached")
     if gui:
-        gui.refresh(0.5)
+        gui.refresh()
 
 
 def install_deps():
