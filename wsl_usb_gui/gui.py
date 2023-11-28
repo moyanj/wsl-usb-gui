@@ -17,9 +17,14 @@ from wx.lib.agw.ultimatelistctrl import (
     UltimateListCtrl,
     UltimateListItem,
     ULC_REPORT,
+    ULC_NO_SORT_HEADER,
+    ULC_SINGLE_SEL,
+    ULC_NO_ITEM_DRAG,
     ULC_MASK_KIND,
     ULC_MASK_TEXT,
     EVT_LIST_ITEM_CHECKED,
+    UltimateListMainWindow,
+    ULC_HAS_VARIABLE_ROW_HEIGHT
 )
 
 from .version import __version__
@@ -143,6 +148,8 @@ class WslUsbGui(wx.Frame):
         self.usb_devices: List[Device] = []
         self.pinned_profiles: List[Profile] = []
         self.name_mapping = dict()
+        self.hidden_devices = list()
+        self.show_hidden = False
         self.refreshing = False
 
         headingFont = wx.Font(
@@ -173,9 +180,31 @@ class WslUsbGui(wx.Frame):
         self.available_listbox.InsertColumns(DEVICE_COLUMNS)
 
         async def available_menu(event):
+            x, y = event.GetX(), event.GetY()
             popupmenu = wx.Menu()
             device = self.get_selected_device()
+            clicked_on_background = False
             if device:
+                item = self.available_listbox.GetFirstSelected()
+                _mainWin: UltimateListMainWindow = self.available_listbox._mainWin
+                x, y = _mainWin.CalcUnscrolledPosition(x, y)
+                if _mainWin.InReportView():
+                    if not _mainWin.HasAGWFlag(ULC_HAS_VARIABLE_ROW_HEIGHT):
+                        current = y // _mainWin.GetLineHeight()
+                        if current != item:
+                            # clicked on background
+                            clicked_on_background = True
+
+            if not device or clicked_on_background:
+                if self.show_hidden:
+                    entries = [
+                        ("Mask hidden devices", self.mask_hidden_devices,),
+                    ]
+                else:
+                    entries = [
+                        ("Show hidden devices", self.show_hidden_devices,),
+                    ]
+            else:
                 entries = [
                     ("Attach to WSL", bg_af(self.attach_wsl)),
                     ("Auto-Attach Device", self.auto_attach_wsl),
@@ -396,6 +425,7 @@ class WslUsbGui(wx.Frame):
             else:
                 self.pinned_profiles = [self.create_profile(*c) for c in config["pinned_profiles"]]
                 self.name_mapping = config["name_mapping"]
+                self.hidden_devices = config.get("hidden_devices", [])
                 self.informed_about_tray = config.get("informed_about_tray", False)
 
         except Exception as ex:
@@ -405,6 +435,7 @@ class WslUsbGui(wx.Frame):
         config = dict(
             pinned_profiles=[astuple(p) for p in self.pinned_profiles],
             name_mapping=self.name_mapping,
+            hidden_devices=self.hidden_devices,
             informed_about_tray=self.informed_about_tray,
         )
         CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -584,7 +615,6 @@ class WslUsbGui(wx.Frame):
     def get_selected_device(self, available=False, attached=False):
         selection = self.get_selection(available, attached)
         if not selection:
-            print("no selection to rename")
             return
 
         device = [
@@ -593,6 +623,36 @@ class WslUsbGui(wx.Frame):
             if d.BusId == selection.BusId and d.Description == selection.Description
         ][0]
         return device
+
+    def unhide_device(self, event=None):
+        device = self.get_selected_device()
+        if not device:
+            return
+
+        if device.InstanceId in self.hidden_devices:
+            self.hidden_devices.remove(device.InstanceId)
+
+        self.save_config()
+        self.refresh()
+
+    def show_hidden_devices(self, event=None):
+        self.show_hidden = True
+        self.refresh()
+
+    def mask_hidden_devices(self, event=None):
+        self.show_hidden = False
+        self.refresh()
+
+    def hide_device(self, event=None):
+        device = self.get_selected_device()
+        if not device:
+            return
+
+        self.hidden_devices.append(device.InstanceId)
+
+        self.save_config()
+        self.refresh()
+
 
     def rename_device(self, event=None):
         device = self.get_selected_device()
@@ -690,6 +750,10 @@ class WslUsbGui(wx.Frame):
             self.available_listbox.DeleteAllItems()
             tasks = []
             for device in sorted(self.usb_devices, key=lambda d: d.BusId):
+                if device.InstanceId in self.hidden_devices:
+                    if self.show_hidden:
+                        self.available_listbox.Append(device, shade=True)
+                    continue
                 new = device in new_devices
                 if device.Attached:
                     self.attached_listbox.Append(device, highlight=new)
@@ -879,7 +943,7 @@ class ListCtrl(UltimateListCtrl):
         UltimateListCtrl.DeleteAllItems(self)
         self.devices.clear()
 
-    def Append(self, device, highlight=False):
+    def Append(self, device, highlight=False, shade=False):
         if device in self.devices:
             pos = self.devices.index(device)
         else:
@@ -909,6 +973,8 @@ class ListCtrl(UltimateListCtrl):
                 raise ValueError(f"{self} devices out of sync")
             if highlight:
                 self.HighlightRow(device, pos)
+            elif shade:
+                self.SetItemBackgroundColour(pos, wx.LIGHT_GREY)
         return pos
 
 
