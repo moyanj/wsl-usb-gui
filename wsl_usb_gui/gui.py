@@ -68,13 +68,18 @@ def run(args):
     )
 
 
-def get_icon():
-    icon = Path(sys.executable).parent / "usb.ico"
-    if not icon.exists():
+def get_resource(name):
+    fname = Path(sys.executable).parent / name
+    if not fname.exists():
         try:
-            icon = Path(__file__).parent / "usb.ico"
+            fname = Path(__file__).parent / name
         except:
-            icon = None
+            fname = None
+    return fname
+
+
+def get_icon(name="usb.ico"):
+    icon = get_resource(name)
     if icon is not None:
         return wx.Icon(str(icon), wx.BITMAP_TYPE_ICO)
 
@@ -118,11 +123,16 @@ class WslUsbGui(wx.Frame):
 
         available_list_label = wx.StaticText(top_panel, label="Windows USB Devices")
         available_list_label.SetFont(headingFont)
+
+        self.busy_icon = wx.adv.AnimationCtrl(top_panel, wx.ID_ANY)
+        self.busy_icon.LoadFile(str(get_resource("busy.gif")))
         refresh_button = self.Button(top_panel, "Refresh", command=self.refresh)
 
         top_controls = wx.BoxSizer(wx.HORIZONTAL)
         top_controls.Add(available_list_label, 2, wx.EXPAND | wx.TOP | wx.LEFT, border=6)
         top_controls.AddStretchSpacer(1)
+        top_controls.Add(self.busy_icon, 0, wx.TOP, border=6)
+        top_controls.AddSpacer(6)
         top_controls.Add(refresh_button, 1, wx.TOP, border=6)
 
         self.available_listbox = ListCtrl(top_panel)
@@ -599,6 +609,9 @@ class WslUsbGui(wx.Frame):
             if delay:
                 await asyncio.sleep(delay)
 
+            self.busy_icon.Show()
+            self.busy_icon.Play()
+
             print("Refresh USB")
 
             usb_devices = set(
@@ -631,6 +644,8 @@ class WslUsbGui(wx.Frame):
             if new_devices and not self.window_is_focussed():
                 self.RequestUserAttention()
         finally:
+            self.busy_icon.Stop()
+            self.busy_icon.Hide()
             self.refreshing = False
 
     def refresh(self, delay=0.0):
