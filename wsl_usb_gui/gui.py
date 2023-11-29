@@ -1,6 +1,7 @@
 import appdirs
 import asyncio
 import json
+import serial.tools.list_ports
 import re
 import sys
 import time
@@ -741,7 +742,11 @@ class WslUsbGui(wx.Frame):
 
             print("Refresh USB")
 
-            usb_devices = await self.list_wsl_usb()
+            task = self.list_wsl_usb()
+
+            comports = {(f"{c.vid:04X}", f"{c.pid:04X}", c.serial_number): c.name for c in serial.tools.list_ports.comports()}
+
+            usb_devices = await task
 
             new_devices = []
             if self.usb_devices:
@@ -761,6 +766,13 @@ class WslUsbGui(wx.Frame):
                     if self.show_hidden:
                         self.available_listbox.Append(device, shade=True)
                     continue
+
+                devid = (vid, pid, sernum) = self.device_ident(device)
+                if devid in comports:
+                    windows_com_port = comports[devid]
+                    if windows_com_port not in device.Description:
+                        device.Description += f" ({windows_com_port})"
+
                 new = device in new_devices
                 if device.Attached:
                     self.attached_listbox.Append(device, highlight=new)

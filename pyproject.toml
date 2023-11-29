@@ -10,6 +10,7 @@ dependencies = [
     "wxpython==4.2.1",
     "wxasync~=0.49",
     "git-versioner>=7.1",
+    "pyserial>=3.5",
 ]
 readme = "README.md"
 requires-python = ">= 3.8"
