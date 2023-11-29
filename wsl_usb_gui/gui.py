@@ -686,26 +686,30 @@ class WslUsbGui(wx.Frame):
         self.save_config()
         self.refresh()
 
+    @staticmethod
+    def device_ident(device: Device):
+        vid, pid, serial = re.search("\\\\VID_([0-9A-F]+)&PID_([0-9A-F]+)\\\\([&0-9A-F]+)$", device.InstanceId.upper()).groups()
+        return vid, pid, serial
+
     async def udev_permissive(self, event=None):
         device = self.get_selected_device()
         if not device:
             return
 
         try:
-            vid = re.search("vid_([0-9a-f]+)&", device.InstanceId.lower()).group(1)
-            pid = re.search("pid_([0-9a-f]+)\\\\", device.InstanceId.lower()).group(1)
-            udev_rule = f'SUBSYSTEM=="usb", ATTRS{{idVendor}}=="{vid}", ATTRS{{idProduct}}=="{pid}", MODE="0666"'
+            vid, pid, serial = self.device_ident(device)
+            name = device.Description.replace(" ", "_")
+            udev_rule_match = f'/SUBSYSTEM=="usb.*ATTRS{{idVendor}}=="{vid}".*ATTRS{{idProduct}}=="{pid}".*ENV{{ID_SERIAL_SHORT}}=="{serial}"/d'
+            udev_rule = (
+                f'SUBSYSTEM=="usb|hidraw",ATTRS{{idVendor}}=="{vid}",ATTRS{{idProduct}}=="{pid}",ENV{{ID_SERIAL_SHORT}}=="{serial}",MODE="0666",SYMLINK+="usb/{name}"\n'
+                f'SUBSYSTEM=="tty",ATTRS{{idVendor}}=="{vid}",ATTRS{{idProduct}}=="{pid}",ENV{{ID_SERIAL_SHORT}}=="{serial}",MODE="0666",SYMLINK+="tty/{name}"'
+            )
             rules_file = "/etc/udev/rules.d/99-wsl-usb-gui.rules"
-            udev_settings = (await run(
-                [
-                    "wsl",
-                    "--user",
-                    "root",
-                    "sh",
-                    "-c",
-                    f"grep -q '{udev_rule}' {rules_file} || (echo '{udev_rule}' >> {rules_file}; sudo udevadm control --reload-rules; sudo udevadm trigger)",
-                ]
-            )).stdout.strip()
+            await run([
+                "wsl", "--user", "root", "sh", "-c",
+                f"sed -i '{udev_rule_match}' {rules_file}; echo '{udev_rule}' >> {rules_file}; sudo udevadm control --reload-rules; sudo udevadm trigger",
+            ])
+            # print(udev_settings)
             print(f"udev rule added: {udev_rule}")
             wx.MessageBox(
                 caption="WSL: Grant User Permissions",
