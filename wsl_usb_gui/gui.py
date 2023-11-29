@@ -176,7 +176,7 @@ class WslUsbGui(wx.Frame):
         top_controls.AddSpacer(6)
         top_controls.Add(refresh_button, 1, wx.TOP, border=6)
 
-        self.available_listbox = ListCtrl(top_panel)
+        self.available_listbox = ListCtrl(top_panel, type=Device)
         self.available_listbox.InsertColumns(DEVICE_COLUMNS)
 
         async def available_menu(event):
@@ -280,7 +280,7 @@ class WslUsbGui(wx.Frame):
         middle_controls.Add(auto_attach_button, 1, wx.TOP, border=6)
         middle_controls.Add(rename_button, 1, wx.TOP, border=6)
 
-        self.attached_listbox = ListCtrl(middle_panel)
+        self.attached_listbox = ListCtrl(middle_panel, type=Device)
         self.attached_listbox.InsertColumns(ATTACHED_COLUMNS)
 
         async def attached_menu(event):
@@ -332,7 +332,7 @@ class WslUsbGui(wx.Frame):
         bottom_controls.AddStretchSpacer(1)
         bottom_controls.Add(pinned_list_delete_button, 1, wx.TOP, border=6)
 
-        self.pinned_listbox = ListCtrl(bottom_panel)
+        self.pinned_listbox = ListCtrl(bottom_panel, type=Profile)
         self.pinned_listbox.InsertColumns(PROFILES_COLUMNS)
 
         def profile_menu(event):
@@ -383,6 +383,7 @@ class WslUsbGui(wx.Frame):
 
         self.Show(True)
         self.SetSize(self.FromDIP(wx.Size(600, 800)))
+        self.update_pinned_listbox()
 
     def Button(self, parent, button_text, command=None, acommand=None):
         btn = wx.Button(parent, label=button_text)
@@ -566,18 +567,19 @@ class WslUsbGui(wx.Frame):
         if result.stderr:
             print(result.stderr)
 
-    def update_pinned_listbox(self):
+    def update_pinned_listbox(self, focus=None):
         self.pinned_listbox.DeleteAllItems()
         for profile in self.pinned_profiles:
             if not profile.Description:
                 profile.Description = self.lookup_description(profile.InstanceId)
-            self.pinned_listbox.Append(profile)
+            highlight = focus is not None and profile == focus
+            self.pinned_listbox.Append(profile, highlight=highlight)
 
     # Define a function to implement choice function
-    def auto_attach_wsl_choice(self, profile):
+    def auto_attach_wsl_choice(self, profile: Profile):
         self.pinned_profiles.append(profile)
         self.save_config()
-        self.update_pinned_listbox()
+        self.update_pinned_listbox(focus=profile)
 
     def remove_pinned_profile(self, busid, description, instanceid):
         profile = self.create_profile(busid, description, instanceid)
@@ -586,17 +588,18 @@ class WslUsbGui(wx.Frame):
                 p.InstanceId and p.InstanceId == profile.InstanceId
             ):
                 self.pinned_profiles.remove(p)
+                self.save_config()
 
     def delete_profile(self, event=None):
         selection = self.pinned_listbox.GetFirstSelected()
         if selection == -1:
             print("no selection to delete")
             return  # no selected item
-        device = self.pinned_listbox.devices[selection]
-        self.pinned_listbox.DeleteItem(selection)
-        busid, description, instanceid = device  # type: ignore
-        self.remove_pinned_profile(busid, description, instanceid)
+        profile: Profile = self.pinned_listbox.devices[selection]
+        # self.pinned_listbox.DeleteItem(selection)
+        self.remove_pinned_profile(profile.BusId, profile.Description, profile.InstanceId)
         self.save_config()
+        self.update_pinned_listbox()
 
     def get_selection(self, available=False, attached=False) -> Optional[Device]:
         if not available or attached:
@@ -761,7 +764,6 @@ class WslUsbGui(wx.Frame):
                     task = asyncio.create_task(self.attach_if_pinned(device, highlight=new))
                     tasks.append(task)
 
-            self.update_pinned_listbox()
             if new_devices and not self.window_is_focussed():
                 self.RequestUserAttention()
             await asyncio.gather(*tasks)
@@ -879,10 +881,10 @@ class WslUsbGui(wx.Frame):
 
 
 class ListCtrl(UltimateListCtrl):
-    def __init__(self, parent, *args, **kw):
+    def __init__(self, parent, *args, type: Type, **kw):
         UltimateListCtrl.__init__(self, parent, wx.ID_ANY, agwStyle=ULC_REPORT|ULC_NO_SORT_HEADER|ULC_SINGLE_SEL|ULC_NO_ITEM_DRAG)
 
-        self.devices: List[Device] = []
+        self.devices: List[type] = []
         self.columns = []
 
     def IsVisible(self):
@@ -913,9 +915,34 @@ class ListCtrl(UltimateListCtrl):
         else:
             wx.CallLater(1000, self.HighlightRowMaintain, device, reset)
 
+    def EnsureVisible(self, item):
+        # This can be removed once this is in a release:
+        # https://github.com/wxWidgets/Phoenix/commit/54981636c5679e5fb4247cb5b094a7ae29dc545f
+        try:
+            if item >= self.GetItemCount():
+                item = self.GetItemCount() - 1
+
+            _mainWin: UltimateListMainWindow = self._mainWin
+
+            rect = _mainWin.GetLineRect(item)
+            client_w, client_h = _mainWin.GetClientSize()
+            hLine = _mainWin.GetLineHeight(item)
+            view_y = hLine*self.GetScrollPos(wx.VERTICAL)
+
+            if _mainWin.InReportView():
+                _mainWin.ResetVisibleLinesRange()
+                if not _mainWin.HasAGWFlag(ULC_HAS_VARIABLE_ROW_HEIGHT):
+                    if rect.y < view_y:
+                        _mainWin.Scroll(-1, rect.y/hLine)
+                    if rect.y+rect.height+5 > view_y+client_h:
+                        _mainWin.Scroll(-1, (rect.y+rect.height-client_h+hLine)//hLine)
+                    _mainWin._dirty = True
+        except:
+            pass
+
     def HighlightRow(self, device, index):
         original = self.GetItemBackgroundColour(index)
-        # self.EnsureVisible(index)  # scroll into view if needed  # needs wx update
+        self.EnsureVisible(index)  # scroll into view if needed  # needs wx update
         self.SetItemBackgroundColour(index, wx.YELLOW)
         if self.IsVisible():
             wx.CallLater(2000, self.HighlightRowReset, device, original)
@@ -1093,7 +1120,7 @@ class popupAutoAttach(wx.Dialog):
         self.Bind(wx.EVT_BUTTON, lambda event: command(), btn)
         return btn
 
-    def choice(self, parent, profile, event):
+    def choice(self, parent: WslUsbGui, profile, event):
         parent.auto_attach_wsl_choice(profile)
         self.Close()
 
