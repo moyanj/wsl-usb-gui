@@ -44,7 +44,6 @@ DEVICE_COLUMNS = ["bus_id", "description", "bound", "forced"]
 ATTACHED_COLUMNS = ["bus_id", "description", "forced"]  # , "client"]
 PROFILES_COLUMNS = ["bus_id", "description"]
 
-USBIPD_PORT = 3240
 APP_DIR = Path(appdirs.user_data_dir("wsl-usb-gui", False))
 APP_DIR.mkdir(exist_ok=True)
 CONFIG_FILE = APP_DIR / "config.json"
@@ -78,6 +77,7 @@ gui: Optional["WslUsbGui"] = None
 loop = None
 
 USBIPD_default = Path("C:\\Program Files\\usbipd-win\\usbipd.exe")
+USBIPD_VERSION: Tuple[int, ...] = (0, 0, 0)
 if USBIPD_default.exists():
     USBIPD = USBIPD_default
 else:
@@ -143,6 +143,9 @@ class WslUsbGui(wx.Frame):
         splitter_top.SetMinimumPaneSize(6)
         splitter_bottom.SetMinimumPaneSize(6)
 
+        # On first run after an upgrade, allow certain post-install tasks
+        self.first_run = True
+
         # On first close, alert the user it's being minimised to tray
         self.informed_about_tray = False
 
@@ -183,7 +186,7 @@ class WslUsbGui(wx.Frame):
         async def available_menu(event):
             x, y = event.GetX(), event.GetY()
             popupmenu = wx.Menu()
-            device = self.get_selected_device()
+            device = self.get_selected_device(verbose=False)
             clicked_on_background = False
             if device:
                 item = self.available_listbox.GetFirstSelected()
@@ -430,6 +433,7 @@ class WslUsbGui(wx.Frame):
                 self.name_mapping = config["name_mapping"]
                 self.hidden_devices = config.get("hidden_devices", [])
                 self.informed_about_tray = config.get("informed_about_tray", False)
+                self.first_run = config.get("first_run", True)
 
         except Exception as ex:
             pass
@@ -440,6 +444,7 @@ class WslUsbGui(wx.Frame):
             name_mapping=self.name_mapping,
             hidden_devices=self.hidden_devices,
             informed_about_tray=self.informed_about_tray,
+            first_run=__version__
         )
         CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
         CONFIG_FILE.write_text(json.dumps(config, indent=4, sort_keys=True))
@@ -485,7 +490,7 @@ class WslUsbGui(wx.Frame):
             return []
 
     @staticmethod
-    async def usb_ipd_run_admin_if_needed(command, msg=None):
+    async def usbipd_run_admin_if_needed(command, msg=None):
         result = await run(command)
         stderr = result.stderr.lower()
         if "error:" in stderr and "administrator" in stderr:
@@ -503,11 +508,11 @@ class WslUsbGui(wx.Frame):
             )
         return result
 
-    async def bind_bus_id(self, bus_id, forced):
+    async def bind_bus_id(self, bus_id, forced, msg=None):
         command = [USBIPD, "bind", f"--busid={bus_id}"]
         if forced:
             command.append("--force")
-        result = await WslUsbGui.usb_ipd_run_admin_if_needed(command)
+        result = await WslUsbGui.usbipd_run_admin_if_needed(command, msg=msg)
         if result.stdout:
             print(result.stdout)
         if result.stderr:
@@ -518,7 +523,7 @@ class WslUsbGui(wx.Frame):
 
     async def unbind_bus_id(self, bus_id):
         command = [USBIPD, "unbind", f"--busid={bus_id}"]
-        result = await WslUsbGui.usb_ipd_run_admin_if_needed(command)
+        result = await WslUsbGui.usbipd_run_admin_if_needed(command)
         if result.stdout:
             print(result.stdout)
         if result.stderr:
@@ -527,14 +532,21 @@ class WslUsbGui(wx.Frame):
         self.refresh(delay=1.0)
         return result
 
-    @staticmethod
-    async def attach_wsl_usb(bus_id):
-        command = [USBIPD, "wsl", "attach", "--busid=" + bus_id]
+    async def attach_wsl_usb(self, device: Device):
         msg = (
             "The first time attaching a device to WSL requires elevated privileges; "
-            "subsequent attaches will succeed with standard user privileges."
+            "subsequent attaches use standard user privileges."
         )
-        result = await WslUsbGui.usb_ipd_run_admin_if_needed(command, msg)
+        if not device.bound:
+            result = await self.bind_bus_id(device.BusId, forced=False, msg=msg)
+            await asyncio.sleep(3)
+            msg = None
+
+        if USBIPD_VERSION >= (4, 0, 0):
+            command = [USBIPD, "attach", "--wsl", "--busid=" + device.BusId]
+        else:
+            command = [USBIPD, "wsl", "attach", "--busid=" + device.BusId]
+        result = await WslUsbGui.usbipd_run_admin_if_needed(command, msg)
         if result.stdout:
             print(result.stdout)
         if result.stderr:
@@ -563,7 +575,11 @@ class WslUsbGui(wx.Frame):
 
     @staticmethod
     async def detach_wsl_usb(bus_id):
-        result = await run([USBIPD, "wsl", "detach", "--busid=" + str(bus_id)])
+        if USBIPD_VERSION >= (4, 0, 0):
+            result = await run([USBIPD, "detach", "--busid=" + str(bus_id)])
+        else:
+            result = await run([USBIPD, "wsl", "detach", "--busid=" + str(bus_id)])
+
         if result.stdout:
             print(result.stdout)
         if result.stderr:
@@ -603,9 +619,9 @@ class WslUsbGui(wx.Frame):
         self.save_config()
         self.update_pinned_listbox()
 
-    def get_selection(self, available=False, attached=False) -> Optional[Device]:
+    def get_selection(self, available=False, attached=False, verbose=True) -> Optional[Device]:
         if not available or attached:
-            # If nether specified, return both
+            # If nether specified, return either
             attached = available = True
         if available:
             item = self.available_listbox.GetFirstSelected()
@@ -617,10 +633,12 @@ class WslUsbGui(wx.Frame):
                 return self.attached_listbox.devices[item]
         return None
 
-    def get_selected_device(self, available=False, attached=False):
-        selection = self.get_selection(available, attached)
+    def get_selected_device(self, available=False, attached=False, verbose=True) -> Optional[Device]:
+        selection = self.get_selection(available, attached, verbose=verbose)
         if not selection:
-            return
+            if verbose:
+                print("No device selected")
+            return None
 
         device = [
             d
@@ -690,7 +708,7 @@ class WslUsbGui(wx.Frame):
 
     @staticmethod
     def device_ident(device: Device):
-        vid, pid, serial = re.search("\\\\VID_([0-9A-F]+)&PID_([0-9A-F]+)\\\\([&0-9A-F]+)$", device.InstanceId.upper()).groups()
+        vid, pid, serial = re.search(r"\\VID_([0-9A-F]+)&PID_([0-9A-F]+)\\([&0-9A-Z]+)$", device.InstanceId.upper()).groups()
         return vid, pid, serial
 
     async def udev_permissive(self, event=None):
@@ -768,11 +786,14 @@ class WslUsbGui(wx.Frame):
                         self.available_listbox.Append(device, shade=True)
                     continue
 
-                devid = (vid, pid, sernum) = self.device_ident(device)
-                if devid in comports:
-                    windows_com_port = comports[devid]
-                    if windows_com_port not in device.Description:
-                        device.Description += f" ({windows_com_port})"
+                try:
+                    devid = (vid, pid, sernum) = self.device_ident(device)
+                    if devid in comports:
+                        windows_com_port = comports[devid]
+                        if windows_com_port not in device.Description:
+                            device.Description += f" ({windows_com_port})"
+                except:
+                    pass
 
                 new = device in new_devices
                 if device.Attached:
@@ -832,7 +853,7 @@ class WslUsbGui(wx.Frame):
                 continue
             if profile.Description and device.Description.strip() != profile.Description.strip():
                 continue
-            ret = await self.attach_wsl_usb(device.BusId)
+            ret = await self.attach_wsl_usb(device)
             if ret.returncode == 0:
                 self.attached_listbox.Append(device, highlight)
                 return
@@ -840,36 +861,37 @@ class WslUsbGui(wx.Frame):
 
         self.available_listbox.Append(device, highlight=highlight)
 
-    def _attach_selection_busid(self):
-        device = self.get_selection(available=True)
-        if not device:
-            print("no selection to attach")
-            return
-        return device.BusId
-
     async def force_bind(self, event=None):
-        bus_id = self._attach_selection_busid()
-        print(f"Bind (forced) {bus_id}")
-        result = await self.bind_bus_id(bus_id, forced=True)
-        print(f"Bind (forced) {bus_id}: {'Success' if not result.returncode else 'Failed'}")
-        self.refresh(delay=2)
+        device = self.get_selected_device(available=True)
+        if not device:
+            return
+        print(f"Bind (forced) {device.BusId}")
+        result = await self.bind_bus_id(device.BusId, forced=True)
+        print(f"Bind (forced) {device.BusId}: {'Success' if not result.returncode else 'Failed'}")
+        self.refresh(delay=3)
 
-    async def bind(self, event=None):
-        bus_id = self._attach_selection_busid()
-        result = await self.bind_bus_id(bus_id, forced=False)
+    async def bind(self, event=None, refresh=True):
+        device = self.get_selected_device(available=True)
+        if not device:
+            return
+        result = await self.bind_bus_id(device.BusId, forced=False)
+        self.refresh(delay=3)
         return result
 
     async def unbind(self, event=None):
-        bus_id = self._attach_selection_busid()
-        await self.unbind_bus_id(bus_id)
-        asyncio.create_task(self.refresh_task())
+        device = self.get_selected_device(available=True)
+        if not device:
+            return
+        await self.unbind_bus_id(device.BusId)
+        self.refresh(delay=3)
 
     async def attach_wsl(self, event=None):
-        bus_id = self._attach_selection_busid()
-        result = await self.attach_wsl_usb(bus_id)
-        print(f"Attach {bus_id}: {'Success' if not result.returncode else 'Failed'}")
-        time.sleep(0.5)
-        self.refresh(delay=2)
+        device = self.get_selected_device(available=True)
+        if not device:
+            return
+        result = await self.attach_wsl_usb(device)
+        print(f"Attach {device.BusId}: {'Success' if not result.returncode else 'Failed'}")
+        self.refresh(delay=3)
 
     async def detach_wsl(self, event=None):
         device = self.get_selection(attached=True)
@@ -894,7 +916,7 @@ class WslUsbGui(wx.Frame):
             self, device.BusId, device.Description, device.InstanceId, self.icon
         )
         popup.ShowModal()
-        self.refresh(delay=2)
+        self.refresh(delay=3)
 
 
 class ListCtrl(UltimateListCtrl):
@@ -1170,7 +1192,7 @@ def _install_deps():
     rsp = wx.MessageBox(
         caption="Install Dependencies",
         message=(
-            "Some of the dependencies are missing, install them now?\n"
+            "Some of the dependencies are missing or outdated, install them now?\n"
             "Note: All WSL instances may need to be restarted."
         ),
         style=wx.YES_NO | wx.ICON_WARNING,
@@ -1229,6 +1251,18 @@ class TaskBarIcon(wx.adv.TaskBarIcon):
         self.Destroy()
 
 
+async def check_usbipd_version():
+    global USBIPD, USBIPD_VERSION
+    try:
+        vers_str = (await run([USBIPD, "--version"])).stdout
+        vers_parts: re.Match[str] = re.search(r'(\d+)\.(\d+)\.(\d+)\+', vers_str) # type: ignore
+        version = tuple((int(v) for v in vers_parts.groups()))
+        USBIPD_VERSION = version
+    except Exception as ex:
+        print("Could not read usbipd version:", ex)
+        install_deps()
+
+
 async def amain():
     global gui
 
@@ -1242,6 +1276,12 @@ async def amain():
     gui = WslUsbGui()
     app.SetTopWindow(gui)
     taskbar = TaskBarIcon(gui, gui.icon)
+
+    await check_usbipd_version()
+
+    if gui.first_run != __version__ and USBIPD_VERSION < (4, 0, 0):
+        install_deps()
+        await check_usbipd_version()
 
     gui.refresh(delay=0.5)
 

@@ -179,9 +179,6 @@ def install_task(parent=None):
     progress_bar.Update(1, "Check/Update WSL2 Kernel Version...")
     rsp &= check_kernel_version()
 
-    progress_bar.Update(2, "Install WSL2 usbipd tools...")
-    rsp &= install_client()
-
     progress_bar.Update(3, "Install usbipd-win service...")
     rsp &= install_server()
 
