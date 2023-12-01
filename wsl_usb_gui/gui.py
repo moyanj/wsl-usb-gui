@@ -217,15 +217,16 @@ class WslUsbGui(wx.Frame):
                         ("Bind", bg_af(self.bind)),
                         ("Force Bind", bg_af(self.force_bind)),
                     ])
-                if device.bound:
+                else:
                     entries.extend([
+                        ("Force Bind", bg_af(self.force_bind)),
                         ("Unbind", bg_af(self.unbind)),
                     ])
                 if device.InstanceId not in self.hidden_devices:
                     entries.extend([
                         ("Hide", self.hide_device),
                     ])
-                if device.InstanceId in self.hidden_devices:
+                else:
                     entries.extend([
                         ("Unhide", self.unhide_device),
                     ])
