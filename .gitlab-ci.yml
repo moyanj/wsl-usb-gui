@@ -48,24 +48,22 @@ release this commit:
 publish:
   stage: release
   image: python:3
-  variables:
-    GIT_STRATEGY: none
-    GIT_SUBMODULE_STRATEGY: none
   rules:
     - if: $CI_PIPELINE_SOURCE == "trigger"
   script:
-    - echo ${TRIGGER_PAYLOAD}
-    - cat ${TRIGGER_PAYLOAD}
-
     - ORG_ID=$(python -c 'import json;j=json.load(open("'${TRIGGER_PAYLOAD}'"));print(j["OrganizationId"])')
     - SR_ID=$(python -c 'import json;j=json.load(open("'${TRIGGER_PAYLOAD}'"));print(j["SigningRequestId"])')
 
-    - echo $ORG_ID $SR_ID
-
     - curl -H "Authorization:"" Bearer ${SP_TOKEN}" -O -J https://app.signpath.io/API/v1/${ORG_ID}/SigningRequests/${SR_ID}/SignedArtifact
+    - ls -l ./*.msi
 
-    - pip install -U gitlab-release
-    - if [ -n "${CI_COMMIT_TAG}" ]; then gitlab-release ./*.msi; fi
+    - pip install -U gitlab-release git-versioner
+    # This gets triggered to run on main, rather than the tag, so need to find the tag manually.
+    - tag=$(git-versioner --short)
+    - desc=$(git describe --tags)
+    - echo "$tag / $desc"
+    # If commit is indeed on a tag, release the build.
+    - if [ "${tag}" == "${desc}" ]; then gitlab-release --release_tag "${tag}" ./*.msi; fi
 
   artifacts:
     name: "WSL-USB-GUI-${CI_COMMIT_TAG:-${CI_COMMIT_SHORT_SHA}}"
