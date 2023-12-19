@@ -13,7 +13,9 @@ $env:WIX="C:\\wix311\\"
 $env:PYTHONIOENCODING="UTF-8"
 
 # Build app
+git status
 $version = @(rye run python -m __version__ --python --short)
+echo "Version: $version"
 .\pyoxidizer.exe build msi_installer --release --var version "$version"
 
 copy-item build\\x86_64-pc-windows-msvc\\release\\msi_installer\\*.msi .\\
