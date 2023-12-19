@@ -8,7 +8,7 @@
 
 -e file:.
 appdirs==1.4.4
-git-versioner==6.0
+git-versioner==7.1
 numpy==1.24.3
 pillow==9.5.0
 pyoxidizer==0.24.0
