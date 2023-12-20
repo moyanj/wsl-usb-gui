@@ -63,10 +63,10 @@ publish:
     - desc=$(git describe --tags)
     - echo "$tag / $desc"
     # If commit is indeed on a tag, release the build.
-    - if [ "${tag}" == "${desc}" ]; then gitlab-release --release_tag "${tag}" ./*.msi; fi
+    - if [ "${tag}" == "${desc}" ]; then gitlab-release --release_tag "${tag}" ./WSL-USB-*.msi; fi
 
   artifacts:
     name: "WSL-USB-GUI-${CI_COMMIT_TAG:-${CI_COMMIT_SHORT_SHA}}"
     expire_in: never
     paths:
-      - ./*.msi
+      - ./WSL-USB-*.msi
