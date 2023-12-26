@@ -1,6 +1,8 @@
 import appdirs
 import asyncio
 import json
+import logging
+import logging.handlers
 import serial.tools.list_ports
 import re
 import sys
@@ -39,7 +41,6 @@ try:
 except:
     pass
 
-
 DEVICE_COLUMNS = ["bus_id", "description", "bound", "forced"]
 ATTACHED_COLUMNS = ["bus_id", "description", "forced"]  # , "client"]
 PROFILES_COLUMNS = ["bus_id", "description"]
@@ -47,6 +48,21 @@ PROFILES_COLUMNS = ["bus_id", "description"]
 APP_DIR = Path(appdirs.user_data_dir("wsl-usb-gui", False))
 APP_DIR.mkdir(exist_ok=True)
 CONFIG_FILE = APP_DIR / "config.json"
+LOG_FILE = APP_DIR / "log.txt"
+
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+file_handler = logging.handlers.RotatingFileHandler(
+    filename=LOG_FILE,  # Name of the log file
+    maxBytes=1048576,   # Maximum file size (1 MB)
+    backupCount=5       # Number of backup files to keep
+)
+file_handler.setFormatter(formatter)
+stream_handler = logging.StreamHandler()
+stream_handler.setFormatter(formatter)
+log = logging.getLogger()
+log.addHandler(file_handler)
+log.addHandler(stream_handler)
+log.setLevel(logging.INFO)  # Log INFO messages and above
 
 @dataclass
 class Device:
@@ -424,7 +440,7 @@ class WslUsbGui(wx.Frame):
 
     def load_config(self):
         try:
-            print(f"Loading config from: {CONFIG_FILE}")
+            log.info(f"Loading config from: {CONFIG_FILE}")
             config = json.loads(CONFIG_FILE.read_text())
             if isinstance(config, list):
                 self.pinned_profiles = [self.create_profile(*c) for c in config]
@@ -486,7 +502,10 @@ class WslUsbGui(wx.Frame):
             return self.parse_state(result.stdout)
         except Exception as ex:
             if isinstance(ex, FileNotFoundError):
+                log.warning("Failed to run usbipd state, install deps")
                 install_deps()
+            else:
+                log.exception("list_wsl_usb")
             return []
 
     @staticmethod
@@ -514,10 +533,10 @@ class WslUsbGui(wx.Frame):
             command.append("--force")
         result = await WslUsbGui.usbipd_run_admin_if_needed(command, msg=msg)
         if result.stdout:
-            print(result.stdout)
+            log.info(result.stdout)
         if result.stderr:
-            print(result.stderr)
-        print(f"Bind {bus_id}: {'Success' if not result.returncode else 'Failed'}")
+            log.error(result.stderr)
+        log.info(f"Bind {bus_id}: {'Success' if not result.returncode else 'Failed'}")
         self.refresh(delay=1.0)
         return result
 
@@ -525,10 +544,10 @@ class WslUsbGui(wx.Frame):
         command = [USBIPD, "unbind", f"--busid={bus_id}"]
         result = await WslUsbGui.usbipd_run_admin_if_needed(command)
         if result.stdout:
-            print(result.stdout)
+            log.info(result.stdout)
         if result.stderr:
-            print(result.stderr)
-        print(f"Unbind {bus_id}: {'Success' if not result.returncode else 'Failed'}")
+            log.error(result.stderr)
+        log.info(f"Unbind {bus_id}: {'Success' if not result.returncode else 'Failed'}")
         self.refresh(delay=1.0)
         return result
 
@@ -548,11 +567,12 @@ class WslUsbGui(wx.Frame):
             command = [USBIPD, "wsl", "attach", "--busid=" + device.BusId]
         result = await WslUsbGui.usbipd_run_admin_if_needed(command, msg)
         if result.stdout:
-            print(result.stdout)
+            log.info(result.stdout)
         if result.stderr:
-            print(result.stderr)
+            log.error(result.stderr)
 
         if "client not correctly installed" in result.stderr.lower():
+            log.warning("client not correctly installed, install deps")
             install_deps()
 
         elif "is already attached to a client." in result.stderr.lower():
@@ -581,9 +601,9 @@ class WslUsbGui(wx.Frame):
             result = await run([USBIPD, "wsl", "detach", "--busid=" + str(bus_id)])
 
         if result.stdout:
-            print(result.stdout)
+            log.info(result.stdout)
         if result.stderr:
-            print(result.stderr)
+            log.error(result.stderr)
 
     def update_pinned_listbox(self, focus=None):
         self.pinned_listbox.DeleteAllItems()
@@ -611,7 +631,7 @@ class WslUsbGui(wx.Frame):
     def delete_profile(self, event=None):
         selection = self.pinned_listbox.GetFirstSelected()
         if selection == -1:
-            print("no selection to delete")
+            log.error("no selection to delete")
             return  # no selected item
         profile: Profile = self.pinned_listbox.devices[selection]
         # self.pinned_listbox.DeleteItem(selection)
@@ -637,7 +657,7 @@ class WslUsbGui(wx.Frame):
         selection = self.get_selection(available, attached, verbose=verbose)
         if not selection:
             if verbose:
-                print("No device selected")
+                log.error("No device selected")
             return None
 
         device = [
@@ -729,15 +749,15 @@ class WslUsbGui(wx.Frame):
                 "wsl", "--user", "root", "sh", "-c",
                 f"sed -i '{udev_rule_match}' {rules_file}; echo '{udev_rule}' >> {rules_file}; sudo udevadm control --reload-rules; sudo udevadm trigger",
             ])
-            # print(udev_settings)
-            print(f"udev rule added: {udev_rule}")
+            # log.info(udev_settings)
+            log.info(f"udev rule added: {udev_rule}")
             wx.MessageBox(
                 caption="WSL: Grant User Permissions",
                 message=f"WSL udev rule added for VID:{vid} PID:{pid}.",
                 style=wx.OK | wx.ICON_INFORMATION,
             )
         except AttributeError as ex:
-            print("Could not get device information for udev: ", ex)
+            log.error("Could not get device information for udev: ", ex)
             wx.MessageBox(
                 caption="WSL: Grant User Permissions",
                 message=f"ERROR: Failed to add udev rule.",
@@ -759,7 +779,7 @@ class WslUsbGui(wx.Frame):
             self.busy_icon.Show()
             self.busy_icon.Play()
 
-            print("Refresh USB")
+            log.info("Refresh USB")
 
             task = self.list_wsl_usb()
 
@@ -828,7 +848,7 @@ class WslUsbGui(wx.Frame):
             ]
         )).stdout.strip()
         udev_start = udev_start.replace("\n", ", ")
-        print(f"udev: {udev_start}")
+        log.info(f"udev: {udev_start}")
 
     def lookup_description(self, instanceId):
         if not instanceId:
@@ -865,9 +885,8 @@ class WslUsbGui(wx.Frame):
         device = self.get_selected_device(available=True)
         if not device:
             return
-        print(f"Bind (forced) {device.BusId}")
         result = await self.bind_bus_id(device.BusId, forced=True)
-        print(f"Bind (forced) {device.BusId}: {'Success' if not result.returncode else 'Failed'}")
+        log.info(f"Bind (forced) {device.BusId}: {'Success' if not result.returncode else 'Failed'}")
         self.refresh(delay=3)
 
     async def bind(self, event=None, refresh=True):
@@ -890,15 +909,15 @@ class WslUsbGui(wx.Frame):
         if not device:
             return
         result = await self.attach_wsl_usb(device)
-        print(f"Attach {device.BusId}: {'Success' if not result.returncode else 'Failed'}")
+        log.info(f"Attach {device.BusId}: {'Success' if not result.returncode else 'Failed'}")
         self.refresh(delay=3)
 
     async def detach_wsl(self, event=None):
         device = self.get_selection(attached=True)
         if not device:
-            print("no selection to detach")
+            log.error("no selection to detach")
             return  # no selected item
-        print(f"Detach {device.BusId} {device.Description}")
+        log.info(f"Detach {device.BusId} {device.Description}")
 
         self.remove_pinned_profile(device.BusId, device.Description, device.InstanceId)
 
@@ -909,7 +928,7 @@ class WslUsbGui(wx.Frame):
         global pop
         device = self.get_selection()
         if not device:
-            print("no selection to create profile for")
+            log.error("no selection to create profile for")
             return
 
         popup = popupAutoAttach(
@@ -1176,9 +1195,9 @@ def bg_af(fn):
 
 def usb_callback(attach):
     if attach:
-        print(f"USB device attached")
+        log.info(f"USB device attached")
     else:
-        print(f"USB device detached")
+        log.info(f"USB device detached")
     if gui:
         gui.refresh()
 
@@ -1259,7 +1278,7 @@ async def check_usbipd_version():
         version = tuple((int(v) for v in vers_parts.groups()))
         USBIPD_VERSION = version
     except Exception as ex:
-        print("Could not read usbipd version:", ex)
+        log.error("Could not read usbipd version:", ex)
         install_deps()
 
 
@@ -1280,6 +1299,7 @@ async def amain():
     await check_usbipd_version()
 
     if gui.first_run != __version__ and USBIPD_VERSION < (4, 0, 0):
+        log.warning("version upgrade detected, install deps")
         install_deps()
         await check_usbipd_version()
 
