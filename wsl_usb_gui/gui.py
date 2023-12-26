@@ -101,7 +101,7 @@ else:
     USBIPD = "usbipd"
 
 
-async def run(args):
+async def run(args, decode=True):
     CREATE_NO_WINDOW = 0x08000000
     if isinstance(args, str):
         proc = await asyncio.create_subprocess_shell(
@@ -121,7 +121,10 @@ async def run(args):
     stdout, stderr = await proc.communicate()
     # Recreate a basic "process results" object to return.
     res = namedtuple("proc", ("stdout", "stderr", "returncode"))
-    return res(stdout.decode(), stderr.decode(), proc.returncode)
+    if decode:
+        return res(stdout.decode(), stderr.decode(), proc.returncode)
+    else:
+        return res(stdout, stderr, proc.returncode)
 
 
 def get_resource(name):
@@ -498,7 +501,7 @@ class WslUsbGui(wx.Frame):
 
     async def list_wsl_usb(self) -> List[Device]:
         try:
-            result = await run([USBIPD, "state"])
+            result = await run([USBIPD, "state"], decode=False)
             return self.parse_state(result.stdout)
         except Exception as ex:
             if isinstance(ex, FileNotFoundError):
