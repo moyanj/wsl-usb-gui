@@ -786,7 +786,11 @@ class WslUsbGui(wx.Frame):
 
             task = self.list_wsl_usb()
 
-            comports = {(f"{c.vid:04X}", f"{c.pid:04X}", c.serial_number): c.name for c in serial.tools.list_ports.comports()}
+            comports = {
+                (f"{c.vid:04X}", f"{c.pid:04X}", c.serial_number): c.name
+                for c in serial.tools.list_ports.comports()
+                if getattr(c, "vid", None) and getattr(c, "pid", None)
+            }
 
             usb_devices = await task
 
