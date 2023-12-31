@@ -760,7 +760,7 @@ class WslUsbGui(wx.Frame):
                 style=wx.OK | wx.ICON_INFORMATION,
             )
         except AttributeError as ex:
-            log.error("Could not get device information for udev: ", ex)
+            log.error(f"Could not get device information for udev: {ex}")
             wx.MessageBox(
                 caption="WSL: Grant User Permissions",
                 message=f"ERROR: Failed to add udev rule.",
@@ -1285,7 +1285,7 @@ async def check_usbipd_version():
         version = tuple((int(v) for v in vers_parts.groups()))
         USBIPD_VERSION = version
     except Exception as ex:
-        log.error("Could not read usbipd version:", ex)
+        log.error(f"Could not read usbipd version: {ex}")
         install_deps()
 
 
