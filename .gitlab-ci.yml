@@ -60,6 +60,7 @@ publish:
     - pip install -U gitlab-release git-versioner
     # This gets triggered to run on main, rather than the tag, so need to find the tag manually.
     - git status
+    - git reset --hard HEAD
     - tag=$(git-versioner --short)
     - desc=$(git describe --tags)
     - echo "$tag / $desc"
