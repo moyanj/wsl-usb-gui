@@ -3,15 +3,16 @@ import asyncio
 import json
 import logging
 import logging.handlers
+import os
 import serial.tools.list_ports
 import re
 import sys
-import time
 from collections import namedtuple
 from dataclasses import dataclass, astuple
 from functools import partial
 from pathlib import Path
 from typing import *
+import webbrowser
 
 import wx
 import wx.adv
@@ -152,6 +153,27 @@ class WslUsbGui(wx.Frame):
         if self.icon:
             self.SetIcon(self.icon)
 
+        self.taskbar = TaskBarIcon(self, self.icon)
+
+        self.filemenu = wx.Menu()
+        # wx.ID_ABOUT and wx.ID_EXIT are standard IDs provided by wxWidgets.
+        about_menu = self.filemenu.Append(wx.ID_ABOUT, "&About"," Information about this program")
+        self.Bind(wx.EVT_MENU, self._go_to_about, about_menu)
+        logs_menu = self.filemenu.Append(wx.ID_ANY, "&Logs"," Open logs folder in explorer")
+        self.Bind(wx.EVT_MENU, self._open_logs_folder, logs_menu)
+        hide_menu = self.filemenu.Append(wx.ID_ANY, "Mi&nimise"," Minimise to Tray")
+        self.Bind(wx.EVT_MENU, self.minimise, hide_menu)
+        self.filemenu.AppendSeparator()
+        exit_menu = self.filemenu.Append(wx.ID_EXIT, "E&xit"," Terminate the program")
+        self.Bind(wx.EVT_MENU, self.taskbar.OnExit, exit_menu)
+
+        self.menuBar = wx.MenuBar()
+        self.menuBar.Append(self.filemenu,"&File")
+        self.SetMenuBar(self.menuBar)
+
+        self.statusbar = self.CreateStatusBar()
+
+        # Intercept window close.
         self.Bind(wx.EVT_CLOSE, self.OnClose)
 
         splitter_bottom = ProportionalSplitter(self, proportion=0.66, style=wx.SP_LIVE_UPDATE)
@@ -437,6 +459,15 @@ class WslUsbGui(wx.Frame):
             event.Skip()
             self.Destroy()
 
+    def minimise(self, _):
+        self.Hide()
+
+    def _open_logs_folder(self, _event):
+        os.startfile(APP_DIR)
+
+    def _go_to_about(self, _event):
+        webbrowser.open_new("https://gitlab.com/alelec/wsl-usb-gui")
+
     @staticmethod
     def create_profile(busid, description, instanceid):
         return Profile(*(None if a == "None" else a for a in (busid, description, instanceid)))
@@ -569,31 +600,35 @@ class WslUsbGui(wx.Frame):
         else:
             command = [USBIPD, "wsl", "attach", "--busid=" + device.BusId]
         result = await WslUsbGui.usbipd_run_admin_if_needed(command, msg)
+        status = f"Attached: {device.Description}"
         if result.stdout:
             log.info(result.stdout)
+            status = result.stdout
         if result.stderr:
             log.error(result.stderr)
+            stderr_lower = result.stderr.lower()
+            for stderr_line in result.stderr.strip().split("\n"):
+                stderr_lower_line = stderr_line.lower()
+                if "usbipd: info:" in stderr_lower_line and "error" not in stderr_lower_line:
+                    pass
+                else:
+                    if "client not correctly installed" in stderr_lower_line:
+                        status = "Client not correctly installed, installing dependencies..."
+                        log.warning(status)
+                        install_deps()
 
-        if "client not correctly installed" in result.stderr.lower():
-            log.warning("client not correctly installed, install deps")
-            install_deps()
+                    elif "is already attached to a client." in stderr_lower_line:
+                        # Not an error, we've just tried to attach twice.
+                        return result
 
-        elif "is already attached to a client." in result.stderr.lower():
-            # Not an error, we've just tried to attach twice.
-            pass
-        elif "error:" in result.stderr.lower():
-            err = [l for l in result.stderr.lower().split("\n") if "error:" in l][0].strip()
+                    elif "device busy (exported)" in stderr_lower_line or "the device appears to be used by windows" in stderr_lower_line:
+                        status = "Error: device in use; stop the software using it, or force bind the device."
+                        break
 
-            if err.startswith("usbip: "):
-                err = err[7:]
-            if err.startswith("error: "):
-                err = err[7:]
+                    else:
+                        status = stderr_line
 
-            if "device busy (exported)" in err:
-                err += "\nTry closing any app using USB, unmount flash drive or enable \"forced\""
-
-            wx.MessageBox(caption="Failed to attach", message=err, style=wx.OK | wx.ICON_WARNING)
-
+        self.SetStatusText("  " + status)
         return result
 
     @staticmethod
@@ -1301,7 +1336,6 @@ async def amain():
 
     gui = WslUsbGui()
     app.SetTopWindow(gui)
-    taskbar = TaskBarIcon(gui, gui.icon)
 
     await check_usbipd_version()
 
