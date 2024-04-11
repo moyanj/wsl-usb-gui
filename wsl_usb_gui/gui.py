@@ -1,3 +1,4 @@
+import argparse
 import appdirs
 import asyncio
 import json
@@ -13,6 +14,7 @@ from functools import partial
 from pathlib import Path
 from typing import *
 import webbrowser
+import winreg
 
 import wx
 import wx.adv
@@ -145,7 +147,7 @@ def get_icon(name="usb.ico"):
 
 
 class WslUsbGui(wx.Frame):
-    def __init__(self):
+    def __init__(self, minimised=False):
         wx.Frame.__init__(self, None, title=f"WSL USB Manager {__version__}")
 
         self.icon = get_icon()
@@ -153,10 +155,31 @@ class WslUsbGui(wx.Frame):
         if self.icon:
             self.SetIcon(self.icon)
 
+        # On first run after an upgrade, allow certain post-install tasks
+        self.first_run = True
+
+        # On first close, alert the user it's being minimised to tray
+        self.informed_about_tray = False
+
+        self.usb_devices: List[Device] = []
+        self.pinned_profiles: List[Profile] = []
+        self.name_mapping = dict()
+        self.hidden_devices = list()
+        self.show_hidden = False
+        self.refreshing = False
+
+        self.auto_start_at_boot = False
+        self.close_to_tray = True
+
+
+        self.load_config()
+
         self.taskbar = TaskBarIcon(self, self.icon)
 
         self.filemenu = wx.Menu()
         # wx.ID_ABOUT and wx.ID_EXIT are standard IDs provided by wxWidgets.
+        settings_menu = self.filemenu.Append(wx.ID_ANY, "&Settings"," Show Settings")
+        self.Bind(wx.EVT_MENU, self.show_settings_window, settings_menu)
         about_menu = self.filemenu.Append(wx.ID_ABOUT, "&About"," Information about this program")
         self.Bind(wx.EVT_MENU, self._go_to_about, about_menu)
         logs_menu = self.filemenu.Append(wx.ID_ANY, "&Logs"," Open logs folder in explorer")
@@ -183,19 +206,6 @@ class WslUsbGui(wx.Frame):
 
         splitter_top.SetMinimumPaneSize(6)
         splitter_bottom.SetMinimumPaneSize(6)
-
-        # On first run after an upgrade, allow certain post-install tasks
-        self.first_run = True
-
-        # On first close, alert the user it's being minimised to tray
-        self.informed_about_tray = False
-
-        self.usb_devices: List[Device] = []
-        self.pinned_profiles: List[Profile] = []
-        self.name_mapping = dict()
-        self.hidden_devices = list()
-        self.show_hidden = False
-        self.refreshing = False
 
         headingFont = wx.Font(
             16, wx.FONTFAMILY_DECORATIVE, wx.FONTSTYLE_NORMAL, wx.FONTWEIGHT_BOLD
@@ -425,11 +435,11 @@ class WslUsbGui(wx.Frame):
         sizer.SetSizeHints(self)
         self.SetSizerAndFit(sizer)
 
-        self.load_config()
-
         self.Show(True)
         self.SetSize(self.FromDIP(wx.Size(600, 800)))
         self.update_pinned_listbox()
+        if minimised:
+            self.Hide()
 
     def Button(self, parent, button_text, command=None, acommand=None):
         btn = wx.Button(parent, label=button_text)
@@ -445,16 +455,20 @@ class WslUsbGui(wx.Frame):
 
     def OnClose(self, event):
         if event.CanVeto():
-            if not self.informed_about_tray:
-                wx.MessageBox(
-                    caption="Minimising to tray", message=f"This will stay running in background.\nCan be restored/exited from system tray icon.", style=wx.OK | wx.ICON_INFORMATION
-                )
-                self.informed_about_tray = True
-                self.save_config()
+            if self.close_to_tray:
+                if not self.informed_about_tray:
+                    wx.MessageBox(
+                        caption="Minimising to tray", message=f"This will stay running in background.\nCan be restored/exited from system tray icon.", style=wx.OK | wx.ICON_INFORMATION
+                    )
+                    self.informed_about_tray = True
+                    self.save_config()
 
-            # Hide the window instead of closing it
-            self.Hide()
-            event.Veto()
+                # Hide the window instead of closing it
+                self.Hide()
+                event.Veto()
+            else:
+                wx.CallAfter(self.taskbar.OnExit, True)
+
         else:
             event.Skip()
             self.Destroy()
@@ -472,6 +486,10 @@ class WslUsbGui(wx.Frame):
     def create_profile(busid, description, instanceid):
         return Profile(*(None if a == "None" else a for a in (busid, description, instanceid)))
 
+    def show_settings_window(self, _):
+        settings_window = SettingsWindow(self)
+        settings_window.ShowModal()
+
     def load_config(self):
         try:
             log.info(f"Loading config from: {CONFIG_FILE}")
@@ -484,6 +502,8 @@ class WslUsbGui(wx.Frame):
                 self.hidden_devices = config.get("hidden_devices", [])
                 self.informed_about_tray = config.get("informed_about_tray", False)
                 self.first_run = config.get("first_run", True)
+                self.auto_start_at_boot = config.get("auto_start_at_boot", self.auto_start_at_boot)
+                self.close_to_tray = config.get("close_to_tray", self.close_to_tray)
 
         except Exception as ex:
             pass
@@ -494,10 +514,30 @@ class WslUsbGui(wx.Frame):
             name_mapping=self.name_mapping,
             hidden_devices=self.hidden_devices,
             informed_about_tray=self.informed_about_tray,
-            first_run=__version__
+            first_run=__version__,
+            auto_start_at_boot=self.auto_start_at_boot,
+            close_to_tray=self.close_to_tray,
+
         )
         CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
         CONFIG_FILE.write_text(json.dumps(config, indent=4, sort_keys=True))
+
+    def update_auto_start_at_boot(self):
+        exe = sys.executable
+        if Path(exe).name.lower().startswith("py"):
+            log.warning("Ignore auto-start, running from source")
+            return
+        registry = winreg.ConnectRegistry(None, winreg.HKEY_CURRENT_USER)
+        runKey = winreg.OpenKey(
+            registry,
+            "SOFTWARE\\Microsoft\\Windows\\CurrentVersion\\Run",
+            access=winreg.KEY_SET_VALUE | winreg.KEY_QUERY_VALUE
+        )
+        key = "WSL-USB-GUI"
+        if self.auto_start_at_boot:
+            winreg.SetValueEx(runKey, key, 0, winreg.REG_SZ, f'"{exe}" --minimised')
+        else:
+            winreg.DeleteKey(runKey, key)
 
     def parse_state(self, text) -> List[Device]:
         rows = []
@@ -1306,11 +1346,15 @@ class TaskBarIcon(wx.adv.TaskBarIcon):
         self.frame.Restore()
         self.frame.Raise()
 
-    def OnExit(self, event):
-        wx.CallAfter(self.frame.Close, True)
+    def Close(self, event=None):
         self.RemoveIcon()
         self.Destroy()
 
+    def OnExit(self, event=None):
+        wx.CallAfter(self.frame.Close, True)
+        self.RemoveIcon()
+        self.Destroy()
+        # self.Close()
 
 async def check_usbipd_version():
     global USBIPD, USBIPD_VERSION
@@ -1324,8 +1368,68 @@ async def check_usbipd_version():
         install_deps()
 
 
+class SettingsWindow(wx.Dialog):
+    def __init__(self, parent: WslUsbGui):
+        super().__init__(parent, title="Settings")
+        self.parent = parent
+        outer_panel = wx.Panel(self)
+
+        # Create a sizer for layout
+        sizer = wx.BoxSizer(wx.VERTICAL)
+
+        # Minimise to tray checkbox
+        self.minimize_tray_checkbox = wx.CheckBox(outer_panel, label="Close to tray (run in background)")
+        self.minimize_tray_checkbox.SetValue(parent.close_to_tray)  # Example
+
+        # Auto-start checkbox
+        self.auto_start_checkbox = wx.CheckBox(outer_panel, label="Auto-start with Windows")
+        self.auto_start_checkbox.SetValue(parent.auto_start_at_boot)
+
+        # Add checkboxes to sizer
+        sizer.Add(self.minimize_tray_checkbox, 0, wx.ALL | wx.ALIGN_LEFT, border=8)
+        sizer.Add(self.auto_start_checkbox, 0, wx.ALL | wx.ALIGN_LEFT, border=8)
+
+        close_button = wx.Button(outer_panel, label="Close")
+        sizer.AddSpacer(8)
+        sizer.Add(close_button, 0, wx.ALIGN_CENTRE | wx.ALL, border=8)
+        self.Bind(wx.EVT_BUTTON, self.Save, close_button)
+
+        # Outer panel with border
+        outer_sizer = wx.BoxSizer(wx.VERTICAL)
+        outer_sizer.Add(outer_panel, 1, wx.ALL | wx.EXPAND, border=8)
+
+        outer_panel.SetSizerAndFit(sizer)
+
+        # Set the dialog sizer
+        self.SetSizerAndFit(outer_sizer)
+
+
+    def Save(self, _):
+        need_save = False
+        if self.minimize_tray_checkbox.Value != self.parent.close_to_tray:
+            self.parent.close_to_tray = self.minimize_tray_checkbox.Value
+            need_save = True
+
+        if self.auto_start_checkbox.Value != self.parent.auto_start_at_boot:
+            self.parent.auto_start_at_boot = self.auto_start_checkbox.Value
+            self.parent.update_auto_start_at_boot()
+            need_save = True
+
+        if need_save:
+            self.parent.save_config()
+
+        self.Close()
+
 async def amain():
     global gui
+
+    if sys.argv[0] is None:
+        # Compiled app, need to inject app path for argparse
+        sys.argv[0] = sys.executable
+
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--minimised", help="Start app minimised to tray")
+    args = parser.parse_args()
 
     app = wxasync.WxAsyncApp(False)
 
@@ -1334,7 +1438,7 @@ async def amain():
         wx.MessageBox(caption="Already running", message="Another instance of the app is already running,\ncheck system tray icon to restore instance.", style=wx.OK | wx.ICON_WARNING)
         return
 
-    gui = WslUsbGui()
+    gui = WslUsbGui(minimised=args.minimised)
     app.SetTopWindow(gui)
 
     await check_usbipd_version()
