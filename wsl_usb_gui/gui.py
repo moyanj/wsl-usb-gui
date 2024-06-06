@@ -68,6 +68,8 @@ log.addHandler(file_handler)
 log.addHandler(stream_handler)
 log.setLevel(logging.INFO)  # Log INFO messages and above
 
+ProcResult = namedtuple("ProcResult", ("stdout", "stderr", "returncode"))
+
 @dataclass
 class Device:
     BusId: str
@@ -125,11 +127,10 @@ async def run(args, decode=True):
 
     stdout, stderr = await proc.communicate()
     # Recreate a basic "process results" object to return.
-    res = namedtuple("proc", ("stdout", "stderr", "returncode"))
     if decode:
-        return res(stdout.decode(), stderr.decode(), proc.returncode)
+        return ProcResult(stdout.decode(), stderr.decode(), proc.returncode)
     else:
-        return res(stdout, stderr, proc.returncode)
+        return ProcResult(stdout, stderr, proc.returncode)
 
 
 def get_resource(name):
@@ -638,11 +639,15 @@ class WslUsbGui(wx.Frame):
             await asyncio.sleep(3)
             msg = None
 
-        if USBIPD_VERSION >= (4, 0, 0):
-            command = [USBIPD, "attach", "--wsl", "--busid=" + device.BusId]
-        else:
+        result = None
+        if USBIPD_VERSION < (4, 0, 0):
             command = [USBIPD, "wsl", "attach", "--busid=" + device.BusId]
-        result = await WslUsbGui.usbipd_run_admin_if_needed(command, msg)
+            result = await WslUsbGui.usbipd_run_admin_if_needed(command, msg)
+        
+        if result is None or (result.returncode != 0):
+            command = [USBIPD, "attach", "--wsl", "--busid=" + device.BusId]
+            result = await WslUsbGui.usbipd_run_admin_if_needed(command, msg)
+        
         status = f"Attached: {device.Description}"
         if result.stdout:
             log.info(result.stdout)
@@ -676,10 +681,11 @@ class WslUsbGui(wx.Frame):
 
     @staticmethod
     async def detach_wsl_usb(bus_id):
-        if USBIPD_VERSION >= (4, 0, 0):
-            result = await run([USBIPD, "detach", "--busid=" + str(bus_id)])
-        else:
+        result = None
+        if USBIPD_VERSION < (4, 0, 0):
             result = await run([USBIPD, "wsl", "detach", "--busid=" + str(bus_id)])
+        if not result or (result.returncode != 0):
+            result = await run([USBIPD, "detach", "--busid=" + str(bus_id)])
 
         if result.stdout:
             log.info(result.stdout)
