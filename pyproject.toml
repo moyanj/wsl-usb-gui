@@ -19,7 +19,7 @@ requires-python = ">= 3.8"
 #version = {attr = "__version__.version_py_short"}
 
 [tool.setuptools]
-packages = ["wsl_usb_gui"]
+packages = ["wsl_usb_gui", "wsl_usb_gui.win_usb_inspect"]
 include-package-data = true
 
 [project.scripts]

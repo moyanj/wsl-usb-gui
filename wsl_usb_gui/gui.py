@@ -35,6 +35,7 @@ from wx.lib.agw.ultimatelistctrl import (
 
 from .version import __version__
 from .usb_monitor import registerDeviceNotification, unregisterDeviceNotification
+from .win_usb_inspect import InspectUsbDevices, gDeviceList
 
 # High DPI Support.
 import ctypes
@@ -75,6 +76,7 @@ class Device:
     forced: bool
     InstanceId: str
     Attached: str
+    OrigDescription: str
 
     def __eq__(self, __value: object) -> bool:
         if not isinstance(__value, Device):
@@ -547,13 +549,14 @@ class WslUsbGui(wx.Frame):
             bus_info = device["BusId"]
             if bus_info:
                 instanceId = device["InstanceId"]
+                orig_description = device["Description"]
                 description = self.name_mapping.get(instanceId, device["Description"])
                 # bind = "☒" if device["PersistedGuid"] else "☐"
                 # forced = "☒" if device["IsForced"] else "☐"
                 bind = True if device["PersistedGuid"] else False
                 forced = True if device["IsForced"] else False
                 attached = device["ClientIPAddress"]
-                rows.append(Device(str(bus_info), description, bind, forced, instanceId, attached))
+                rows.append(Device(str(bus_info), description, bind, forced, instanceId, attached, orig_description))
         return rows
 
     def deselect_other_treeviews(self, *args, treeview: UltimateListCtrl):
@@ -697,6 +700,12 @@ class WslUsbGui(wx.Frame):
         self.save_config()
         self.update_pinned_listbox(focus=profile)
 
+    def update_pinned_profile(self, instanceid, new_description):
+        for p in list(self.pinned_profiles):
+            if p.InstanceId and p.InstanceId == instanceid:
+                p.Description = new_description
+                self.save_config()
+
     def remove_pinned_profile(self, busid, description, instanceid):
         profile = self.create_profile(busid, description, instanceid)
         for p in list(self.pinned_profiles):
@@ -779,30 +788,7 @@ class WslUsbGui(wx.Frame):
         device = self.get_selected_device()
         if not device:
             return
-
-        instanceId = device.InstanceId
-
-        current = self.name_mapping.get(instanceId, device.Description)
-        caption = "Rename"
-        message = f"Enter new label for port: {device.BusId}\nOr leave blank to reset to default."
-        dlg = wx.TextEntryDialog(self, message, caption, current)
-        newname = None
-        if dlg.ShowModal() == wx.ID_OK:
-            newname = dlg.GetValue()
-
-        if newname is None:
-            # Cancel
-            return
-
-        if newname:
-            self.name_mapping[instanceId] = newname
-        else:
-            try:
-                self.name_mapping.pop(instanceId)
-            except:
-                pass
-        self.save_config()
-        self.refresh()
+        popupRename(self, device).ShowModal()
 
     @staticmethod
     def device_ident(device: Device):
@@ -846,6 +832,12 @@ class WslUsbGui(wx.Frame):
     def window_is_focussed():
         return wx.GetActiveWindow() is not None
 
+    def generic_device_name(self, name):
+        if name == "USB Input Device":
+            return True
+        if re.match(r"USB Serial Device \(COM\d+\)", name):
+            return True
+
     async def refresh_task(self, delay: float = 0):
         try:
             if self.refreshing:
@@ -859,13 +851,15 @@ class WslUsbGui(wx.Frame):
 
             log.info("Refresh USB")
 
-            task = self.list_wsl_usb()
+            task = asyncio.create_task(self.list_wsl_usb())
 
-            comports = {
-                (f"{c.vid:04X}", f"{c.pid:04X}", c.serial_number): c.name
-                for c in serial.tools.list_ports.comports()
-                if getattr(c, "vid", None) and getattr(c, "pid", None)
-            }
+            comports = {}
+            for c in serial.tools.list_ports.comports():
+                if getattr(c, "vid", None) and getattr(c, "pid", None):
+                    comports[(f"{c.vid:04X}", f"{c.pid:04X}", c.serial_number)] = c.name
+                await asyncio.sleep(0.01)
+
+            raw_devices, tree = InspectUsbDevices()
 
             usb_devices = await task
 
@@ -876,11 +870,12 @@ class WslUsbGui(wx.Frame):
 
             self.usb_devices = usb_devices
 
+            self.attached_listbox.DeleteAllItems()
+            self.available_listbox.DeleteAllItems()
+
             if not self.usb_devices:
                 return
 
-            self.attached_listbox.DeleteAllItems()
-            self.available_listbox.DeleteAllItems()
             tasks = []
             for device in sorted(self.usb_devices, key=lambda d: d.BusId):
                 if device.InstanceId in self.hidden_devices:
@@ -888,11 +883,18 @@ class WslUsbGui(wx.Frame):
                         self.available_listbox.Append(device, shade=True)
                     continue
 
+                if self.generic_device_name(device.Description):
+                    if device.InstanceId not in self.name_mapping:
+                        if details := raw_devices.get(device.InstanceId):
+                            device.OrigDescription = device.Description
+                            device.Description = f"{details.Manufacturer} {details.Product}"
+
                 try:
                     devid = (vid, pid, sernum) = self.device_ident(device)
                     if devid in comports:
                         windows_com_port = comports[devid]
                         if windows_com_port not in device.Description:
+                            device.Description = re.sub(r" ?\(COM\d+\) ?", "", device.Description)
                             device.Description += f" ({windows_com_port})"
                 except:
                     pass
@@ -945,6 +947,7 @@ class WslUsbGui(wx.Frame):
 
     async def attach_if_pinned(self, device, highlight):
         for profile in self.pinned_profiles:
+            desc = profile.Description
             if profile.InstanceId or profile.BusId:
                 # Only fallback to description if no other filter set
                 desc = None
@@ -953,7 +956,7 @@ class WslUsbGui(wx.Frame):
                 continue
             if profile.InstanceId and device.InstanceId != profile.InstanceId:
                 continue
-            if profile.Description and device.Description.strip() != profile.Description.strip():
+            if desc and device.Description.strip() != desc.strip():
                 continue
             ret = await self.attach_wsl_usb(device)
             if ret.returncode == 0:
@@ -1262,6 +1265,99 @@ class popupAutoAttach(wx.Dialog):
 
     def choice(self, parent: WslUsbGui, profile, event):
         parent.auto_attach_wsl_choice(profile)
+        self.Close()
+
+
+class popupRename(wx.Dialog):
+    def __init__(self, parent: WslUsbGui, device: Device):
+        super().__init__(parent, title="Rename Device")
+
+        self.gui = parent
+        self.device = device
+
+        self.instanceId = device.InstanceId
+        current = self.gui.name_mapping.get(self.instanceId, device.Description)
+
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+
+        label = f"Enter new label for device on port: {device.BusId}"
+        message = wx.StaticText(self, label=label)
+        font = message.GetFont()
+        font.SetWeight(wx.BOLD)
+        message.SetFont(font)
+        top_sizer.Add(message, flag=wx.TOP | wx.LEFT | wx.RIGHT, border=12)
+
+        top_sizer.Add(wx.StaticText(self, label="  Click buttons below to fill from defaults,"), flag=wx.LEFT | wx.RIGHT, border=12)
+        top_sizer.Add(wx.StaticText(self, label="  Type your own label,"), flag=wx.LEFT | wx.RIGHT, border=12)
+        top_sizer.Add(wx.StaticText(self, label="  Or leave blank to reset to default."), flag=wx.LEFT | wx.RIGHT, border=12)
+
+        top_sizer.Add(wx.StaticText(self, label="Driver Default:"), flag=wx.TOP | wx.LEFT | wx.RIGHT, border=12)
+        default_btn = wx.Button(self, label=device.OrigDescription)
+        top_sizer.Add(default_btn, flag=wx.RIGHT | wx.LEFT | wx.EXPAND, border=20)
+
+        raw_devices, __tree = InspectUsbDevices()
+        device_btn = None
+        if details := raw_devices.get(self.instanceId):
+            device = f"{details.Manufacturer} {details.Product}"
+
+            top_sizer.Add(wx.StaticText(self, label="Device Details:"), flag=wx.TOP | wx.LEFT | wx.RIGHT, border=12)
+            device_btn = wx.Button(self, label=device)
+            top_sizer.Add(device_btn, flag=wx.RIGHT | wx.LEFT | wx.EXPAND, border=20)
+
+
+        top_sizer.Add(wx.StaticLine(self, style=wx.LI_HORIZONTAL | wx.EXPAND), flag=wx.TOP | wx.BOTTOM | wx.LEFT | wx.RIGHT | wx.EXPAND, border=8)
+
+        top_sizer.Add(wx.StaticText(self, label="New Name:"), flag=wx.LEFT | wx.RIGHT, border=12)
+
+        self.textEntry = wx.TextCtrl(self, -1, current, size=wx.Size(-1, self.FromDIP(26)))
+        top_sizer.Add(self.textEntry, flag=wx.RIGHT | wx.LEFT | wx.EXPAND, border=12)
+
+        btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        ok_btn = wx.Button(self, label="OK", size=self.FromDIP(wx.Size(60, 24)))
+        reset_btn = wx.Button(self, label="Reset", size=self.FromDIP(wx.Size(60, 24)))
+        cancel_btn = wx.Button(self, label="Cancel", size=self.FromDIP(wx.Size(60, 24)))
+        btn_sizer.Add(ok_btn, border=6)
+        btn_sizer.Add(reset_btn, border=6)
+        btn_sizer.Add(cancel_btn, border=6)
+        top_sizer.Add(btn_sizer, flag=wx.BOTTOM | wx.TOP | wx.RIGHT | wx.LEFT | wx.EXPAND, border=12)
+
+        self.Bind(wx.EVT_BUTTON, self.set_text, default_btn)
+        if device_btn:
+            self.Bind(wx.EVT_BUTTON, self.set_text, device_btn)
+
+        self.Bind(wx.EVT_BUTTON, self.ok, ok_btn)
+        self.Bind(wx.EVT_BUTTON, self.reset, reset_btn)
+        self.Bind(wx.EVT_BUTTON, self.cancel, cancel_btn)
+
+        ok_btn.SetDefault()
+
+        self.SetSizerAndFit(top_sizer)
+
+    def set_text(self, event: wx.CommandEvent):
+        btn: wx.Button = event.EventObject
+        self.textEntry.SetValue(btn.GetLabelText())
+
+    def cancel(self, event):
+        self.Close()
+
+    def reset(self, event):
+        self.textEntry.SetValue("")
+        self.ok(event)
+
+    def ok(self, event):
+        newname = self.textEntry.GetValue()
+
+        if newname:
+            self.gui.update_pinned_profile(self.instanceId, newname)
+            self.gui.name_mapping[self.instanceId] = newname
+        else:
+            try:
+                self.gui.name_mapping.pop(self.instanceId)
+            except:
+                pass
+        self.gui.save_config()
+        self.gui.refresh()
+
         self.Close()
 
 

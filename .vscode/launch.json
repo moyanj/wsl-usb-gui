@@ -31,6 +31,14 @@
             ],
             "console": "integratedTerminal",
             "justMyCode": false
+        },
+        {
+            "name": "usb scan",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "wsl_usb_gui.win_usb_inspect",
+            "console": "integratedTerminal",
+            "justMyCode": false
         }
     ]
 }
