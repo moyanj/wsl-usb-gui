@@ -958,10 +958,12 @@ class WslUsbGui(wx.Frame):
                 continue
             if desc and device.Description.strip() != desc.strip():
                 continue
-            ret = await self.attach_wsl_usb(device)
-            if ret.returncode == 0:
-                self.attached_listbox.Append(device, highlight)
-                return
+            for __retry in reversed(range(3)):
+                ret = await self.attach_wsl_usb(device)
+                if ret.returncode == 0:
+                    self.attached_listbox.Append(device, highlight)
+                    return
+                await asyncio.sleep(0.5)
             break
 
         self.available_listbox.Append(device, highlight=highlight)
