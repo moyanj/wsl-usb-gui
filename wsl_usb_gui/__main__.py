@@ -1,4 +1,8 @@
-import asyncio
-from . import gui
+from .logger import log
 
-gui.main()
+try:
+    from . import gui
+
+    gui.main()
+except:
+    log.exception("APPCRASH")

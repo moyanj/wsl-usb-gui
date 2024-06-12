@@ -1,9 +1,8 @@
+from .logger import log, APP_DIR
+
 import argparse
-import appdirs
 import asyncio
 import json
-import logging
-import logging.handlers
 import os
 import serial.tools.list_ports
 import re
@@ -49,24 +48,7 @@ DEVICE_COLUMNS = ["bus_id", "description", "bound", "forced"]
 ATTACHED_COLUMNS = ["bus_id", "description", "forced"]  # , "client"]
 PROFILES_COLUMNS = ["bus_id", "description"]
 
-APP_DIR = Path(appdirs.user_data_dir("wsl-usb-gui", False))
-APP_DIR.mkdir(exist_ok=True)
 CONFIG_FILE = APP_DIR / "config.json"
-LOG_FILE = APP_DIR / "log.txt"
-
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-file_handler = logging.handlers.RotatingFileHandler(
-    filename=LOG_FILE,  # Name of the log file
-    maxBytes=1048576,   # Maximum file size (1 MB)
-    backupCount=5       # Number of backup files to keep
-)
-file_handler.setFormatter(formatter)
-stream_handler = logging.StreamHandler()
-stream_handler.setFormatter(formatter)
-log = logging.getLogger()
-log.addHandler(file_handler)
-log.addHandler(stream_handler)
-log.setLevel(logging.INFO)  # Log INFO messages and above
 
 ProcResult = namedtuple("ProcResult", ("stdout", "stderr", "returncode"))
 
@@ -643,11 +625,11 @@ class WslUsbGui(wx.Frame):
         if USBIPD_VERSION < (4, 0, 0):
             command = [USBIPD, "wsl", "attach", "--busid=" + device.BusId]
             result = await WslUsbGui.usbipd_run_admin_if_needed(command, msg)
-        
+
         if result is None or (result.returncode != 0):
             command = [USBIPD, "attach", "--wsl", "--busid=" + device.BusId]
             result = await WslUsbGui.usbipd_run_admin_if_needed(command, msg)
-        
+
         status = f"Attached: {device.Description}"
         if result.stdout:
             log.info(result.stdout)
@@ -1306,10 +1288,10 @@ class popupRename(wx.Dialog):
         raw_devices, __tree = InspectUsbDevices()
         device_btn = None
         if details := raw_devices.get(self.instanceId):
-            device = f"{details.Manufacturer} {details.Product}"
+            dev_label = f"{details.Manufacturer} {details.Product}"
 
             top_sizer.Add(wx.StaticText(self, label="Device Details:"), flag=wx.TOP | wx.LEFT | wx.RIGHT, border=12)
-            device_btn = wx.Button(self, label=device)
+            device_btn = wx.Button(self, label=dev_label)
             top_sizer.Add(device_btn, flag=wx.RIGHT | wx.LEFT | wx.EXPAND, border=20)
 
 
