@@ -80,6 +80,7 @@ class Profile:
 
 gui: Optional["WslUsbGui"] = None
 loop = None
+INSTALLED_DEPS = False
 
 USBIPD_default = Path("C:\\Program Files\\usbipd-win\\usbipd.exe")
 USBIPD_VERSION: Tuple[int, ...] = (0, 0, 0)
@@ -1371,7 +1372,10 @@ def usb_callback(attach):
 
 
 def install_deps():
-    asyncio.get_event_loop().call_soon_threadsafe(_install_deps)
+    global INSTALLED_DEPS
+    if not INSTALLED_DEPS:
+        asyncio.get_event_loop().call_soon_threadsafe(_install_deps)
+        INSTALLED_DEPS = True
 
 
 def _install_deps():
