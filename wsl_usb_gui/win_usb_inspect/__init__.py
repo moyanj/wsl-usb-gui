@@ -1466,12 +1466,12 @@ def EnumerateHubPorts(hTreeParent: List, hHubDevice: HANDLE, bNumPorts: bytes):
                 UsbipdInstanceId = info.UsbDeviceProperties.DeviceId
                 if connectionInfoEx.DeviceDescriptor:
                     DeviceDesc = connectionInfoEx.DeviceDescriptor
-                    info.Manufacturer = info.Strings.get(DeviceDesc.iManufacturer, "")
-                    info.Product = info.Strings.get(DeviceDesc.iProduct, "")
+                    info.Manufacturer = info.Strings.get(DeviceDesc.iManufacturer, "").replace("\x00", "")
+                    info.Product = info.Strings.get(DeviceDesc.iProduct, "").replace("\x00", "")
                     if DeviceDesc.iSerialNumber:
                         info.SerialNumber = info.Strings.get(
                             DeviceDesc.iSerialNumber, ""
-                        )
+                        ).replace("\x00", "")
 
                     # When device is not attached this matches the usbipd InstanceID
                     # Once attached however the VID/PID elements change to relate to the

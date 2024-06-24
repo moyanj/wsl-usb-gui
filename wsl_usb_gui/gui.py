@@ -881,7 +881,7 @@ class WslUsbGui(wx.Frame):
                         if details := raw_devices.get(device.InstanceId):
                             if details.Manufacturer and details.Product:
                                 device.OrigDescription = device.Description
-                                device.Description = f"{details.Manufacturer} {details.Product}"
+                                device.Description = f"{details.Manufacturer.strip()} {details.Product.strip()}"
 
                 try:
                     devid = (vid, pid, sernum) = self.device_ident(device)
