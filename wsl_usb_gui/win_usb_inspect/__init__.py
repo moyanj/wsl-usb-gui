@@ -4,6 +4,10 @@ from typing import Optional, Dict, List, Tuple
 
 from .winusbclasses import *
 
+import logging
+
+log = logging.getLogger("usb inspect")
+
 DEBUG = False
 
 didd_cb_sizes = (8, 6, 5)  # different on 64 bit / 32 bit etc
@@ -15,12 +19,14 @@ TRUE = wintypes.BOOL(1)
 S_OK = HRESULT(0)
 E_FAIL = HRESULT(0x80004005)
 
+
 # enum USBDEVICEINFOTYPE
 class USBDEVICEINFOTYPE:
     HostControllerInfo = 0
     RootHubInfo = 1
     ExternalHubInfo = 2
     DeviceInfo = 3
+
 
 class DEVICE_INFO_NODE:
     def __init__(self):
@@ -39,12 +45,12 @@ class DEVICE_INFO_NODE:
 
 class USB_DEVICE_PNP_STRINGS:
     def __init__(self):
-            self.DeviceId = ""
-            self.DeviceDesc = ""
-            self.HwId = ""
-            self.Service = ""
-            self.DeviceClass = ""
-            self.PowerState = ""
+        self.DeviceId = ""
+        self.DeviceDesc = ""
+        self.HwId = ""
+        self.Service = ""
+        self.DeviceClass = ""
+        self.PowerState = ""
 
 
 class USBHOSTCONTROLLERINFO:
@@ -58,12 +64,13 @@ class USBHOSTCONTROLLERINFO:
         self.SubSysID = ULONG()
         self.Revision = ULONG()
         # USBPowerInfo = USB_POWER_INFO()
-        self.BusDeviceFunctionValid:bool = False
+        self.BusDeviceFunctionValid: bool = False
         self.BusNumber = ULONG()
         self.BusDevice = 0
         self.BusFunction = 0
         # ControllerInfo = USB_CONTROLLER_INFO_0()
         self.UsbDeviceProperties = USB_DEVICE_PNP_STRINGS()
+
 
 class USBROOTHUBINFO:
     def __init__(self, name=""):
@@ -75,6 +82,7 @@ class USBROOTHUBINFO:
         self.UsbDeviceProperties = USB_DEVICE_PNP_STRINGS()
         # self.DeviceInfoNode = DEVICE_INFO_NODE()
         # self.HubCapabilityEx = USB_HUB_CAPABILITIES_EX()
+
 
 class USBEXTERNALHUBINFO:
     def __init__(self, name=""):
@@ -92,6 +100,7 @@ class USBEXTERNALHUBINFO:
         # self.DeviceInfoNode = DEVICE_INFO_NODE()
         # self.HubCapabilityEx = USB_HUB_CAPABILITIES_EX()
 
+
 class USBDEVICEINFO:
     def __init__(self):
         self.SerialNumber = ""
@@ -99,19 +108,28 @@ class USBDEVICEINFO:
         self.Product = ""
 
         self.DeviceInfoType: Optional[USBDEVICEINFOTYPE] = USBDEVICEINFOTYPE()
-        self.HubInfo: Optional[USB_NODE_INFORMATION] = USB_NODE_INFORMATION()          # NULL if not a HUB
+        self.HubInfo: Optional[USB_NODE_INFORMATION] = (
+            USB_NODE_INFORMATION()
+        )  # NULL if not a HUB
         # self.HubInfoEx: Optional[USB_HUB_INFORMATION_EX] = USB_HUB_INFORMATION_EX()        # NULL if not a HUB
-        self.HubName: Optional[PCHAR] = PCHAR()          # NULL if not a HUB
-        self.ConnectionInfo: Optional[USB_NODE_CONNECTION_INFORMATION_EX] = USB_NODE_CONNECTION_INFORMATION_EX()   # NULL if root HUB
+        self.HubName: Optional[PCHAR] = PCHAR()  # NULL if not a HUB
+        self.ConnectionInfo: Optional[USB_NODE_CONNECTION_INFORMATION_EX] = (
+            USB_NODE_CONNECTION_INFORMATION_EX()
+        )  # NULL if root HUB
         # self.PortConnectorProps: Optional[USB_PORT_CONNECTOR_PROPERTIES] = USB_PORT_CONNECTOR_PROPERTIES()
-        self.ConfigDesc: Optional[USB_DESCRIPTOR_REQUEST] = USB_DESCRIPTOR_REQUEST()       # NULL if root HUB
+        self.ConfigDesc: Optional[USB_DESCRIPTOR_REQUEST] = (
+            USB_DESCRIPTOR_REQUEST()
+        )  # NULL if root HUB
         # self.BosDesc: Optional[USB_DESCRIPTOR_REQUEST] = USB_DESCRIPTOR_REQUEST()          # NULL if root HUB
         self.StringDescs: List[STRING_DESCRIPTOR_NODE] = []
         self.Strings = {}
         # self.ConnectionInfoV2: Optional[USB_NODE_CONNECTION_INFORMATION_EX_V2] = USB_NODE_CONNECTION_INFORMATION_EX_V2() # NULL if root HUB
-        self.UsbDeviceProperties: Optional[USB_DEVICE_PNP_STRINGS] = USB_DEVICE_PNP_STRINGS()
-        # self.DeviceInfoNode: Optional[DEVICE_INFO_NODE] = DEVICE_INFO_NODE()
+        self.UsbDeviceProperties: Optional[USB_DEVICE_PNP_STRINGS] = (
+            USB_DEVICE_PNP_STRINGS()
+        )
+        self.DeviceInfoNode: Optional[DEVICE_INFO_NODE] = DEVICE_INFO_NODE()
         # self.HubCapabilityEx: Optional[USB_HUB_CAPABILITIES_EX] = USB_HUB_CAPABILITIES_EX()  # NULL if not a HUB
+
 
 class STRING_DESCRIPTOR_NODE:
     def __init__(self):
@@ -120,6 +138,7 @@ class STRING_DESCRIPTOR_NODE:
         self.DescriptorIndex = 0
         self.LanguageID = 0
         self.StringDescriptor: Optional[USB_STRING_DESCRIPTOR] = None
+
 
 gHubList: List[DEVICE_INFO_NODE] = []
 gDeviceList: List[DEVICE_INFO_NODE] = []
@@ -130,6 +149,7 @@ gDoConfigDesc = True
 
 parsed_devices = {}
 
+
 def EnumerateAllDevices():
     global gHubList, gDeviceList
     gDeviceList = EnumerateAllDevicesWithGuid(GUID_DEVINTERFACE_USB_DEVICE)
@@ -139,18 +159,17 @@ def EnumerateAllDevices():
 def EnumerateAllDevicesWithGuid(Guid) -> List[DEVICE_INFO_NODE]:
     DeviceList: List[DEVICE_INFO_NODE] = []
 
-    DeviceInfo: HDEVINFO = SetupDiGetClassDevs(byref(Guid),
-                                     None,
-                                     None,
-                                     DWORD(DIGCF_PRESENT | DIGCF_DEVICEINTERFACE))
+    DeviceInfo: HDEVINFO = SetupDiGetClassDevs(
+        byref(Guid), None, None, DWORD(DIGCF_PRESENT | DIGCF_DEVICEINTERFACE)
+    )
 
     index = ULONG(0)
-    error = (0)
+    error = 0
 
     error = 0
     index = 0
 
-    while (error != ERROR_NO_MORE_ITEMS):
+    while error != ERROR_NO_MORE_ITEMS:
         success = BOOL(False)
         pNode = DEVICE_INFO_NODE()
 
@@ -158,122 +177,119 @@ def EnumerateAllDevicesWithGuid(Guid) -> List[DEVICE_INFO_NODE]:
         pNode.DeviceInterfaceData.cbSize = sizeof(pNode.DeviceInterfaceData)
         pNode.DeviceInfoData.cbSize = sizeof(pNode.DeviceInfoData)
 
-        success = SetupDiEnumDeviceInfo(DeviceInfo,
-                                        DWORD(index),
-                                        byref(pNode.DeviceInfoData))
+        success = SetupDiEnumDeviceInfo(
+            DeviceInfo, DWORD(index), byref(pNode.DeviceInfoData)
+        )
 
         index += 1
 
-        if (not success):
+        if not success:
             error = GetLastError()
 
-            if (error != ERROR_NO_MORE_ITEMS):
+            if error != ERROR_NO_MORE_ITEMS:
                 raise Exception("OOPS")
 
-
-            #FreeDeviceInfoNode(byref(pNode))
+            # FreeDeviceInfoNode(byref(pNode))
             pNode = None
 
         else:
             bResult = BOOL(0)
             requiredLength = ULONG(0)
 
-            bResult, pNode.DeviceDescName = GetDeviceProperty(DeviceInfo,
-                                        pNode.DeviceInfoData,
-                                        SPDRP_DEVICEDESC)
-            if (not bResult):
-                #FreeDeviceInfoNode(byref(pNode))
+            bResult, pNode.DeviceDescName = GetDeviceProperty(
+                DeviceInfo, pNode.DeviceInfoData, SPDRP_DEVICEDESC
+            )
+            if not bResult:
+                # FreeDeviceInfoNode(byref(pNode))
                 pNode = None
                 raise Exception("OOPS")
                 break
 
-
-            bResult, pNode.DeviceDriverName = GetDeviceProperty(DeviceInfo,
-                                        pNode.DeviceInfoData,
-                                        SPDRP_DRIVER)
-            if (not bResult):
-                #FreeDeviceInfoNode(byref(pNode))
+            bResult, pNode.DeviceDriverName = GetDeviceProperty(
+                DeviceInfo, pNode.DeviceInfoData, SPDRP_DRIVER
+            )
+            if not bResult:
+                # FreeDeviceInfoNode(byref(pNode))
                 pNode = None
                 raise Exception("OOPS")
                 break
-
 
             pNode.DeviceInterfaceData.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA)
 
-            success = SetupDiEnumDeviceInterfaces(DeviceInfo,
-                                                    None,
-                                                    byref(Guid),
-                                                    index-1,
-                                                    byref(pNode.DeviceInterfaceData))
-            if (not success):
-                #FreeDeviceInfoNode(byref(pNode))
+            success = SetupDiEnumDeviceInterfaces(
+                DeviceInfo,
+                None,
+                byref(Guid),
+                index - 1,
+                byref(pNode.DeviceInterfaceData),
+            )
+            if not success:
+                # FreeDeviceInfoNode(byref(pNode))
                 pNode = None
                 raise Exception("OOPS")
                 break
 
-
-            success = SetupDiGetDeviceInterfaceDetail(DeviceInfo,
-                                                        byref(pNode.DeviceInterfaceData),
-                                                        NULL,
-                                                        0,
-                                                        byref(requiredLength),
-                                                        NULL)
+            success = SetupDiGetDeviceInterfaceDetail(
+                DeviceInfo,
+                byref(pNode.DeviceInterfaceData),
+                NULL,
+                0,
+                byref(requiredLength),
+                NULL,
+            )
 
             error = GetLastError()
 
-            if (not success and error != ERROR_INSUFFICIENT_BUFFER):
-                #FreeDeviceInfoNode(byref(pNode))
+            if not success and error != ERROR_INSUFFICIENT_BUFFER:
+                # FreeDeviceInfoNode(byref(pNode))
                 pNode = None
                 raise Exception("OOPS")
                 break
-
 
             resize(pNode.DeviceDetailData, requiredLength.value)
             # pNode.DeviceDetailData = ALLOC(requiredLength)
 
-            if (pNode.DeviceDetailData == NULL):
-                #FreeDeviceInfoNode(byref(pNode))
+            if pNode.DeviceDetailData == NULL:
+                # FreeDeviceInfoNode(byref(pNode))
                 pNode = None
                 raise Exception("OOPS")
                 break
-
 
             success = False
             global didd_cb_sizes
             for cb_size in didd_cb_sizes:
-                pNode.DeviceDetailData.cbSize = cb_size # sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA) # cb_size
+                pNode.DeviceDetailData.cbSize = (
+                    cb_size  # sizeof(SP_DEVICE_INTERFACE_DETAIL_DATA) # cb_size
+                )
 
-                success = SetupDiGetDeviceInterfaceDetail(DeviceInfo,
-                                                            byref(pNode.DeviceInterfaceData),
-                                                            byref(pNode.DeviceDetailData),
-                                                            requiredLength,
-                                                            byref(requiredLength),
-                                                            byref(pNode.DeviceInfoData))
-                if (not success):
+                success = SetupDiGetDeviceInterfaceDetail(
+                    DeviceInfo,
+                    byref(pNode.DeviceInterfaceData),
+                    byref(pNode.DeviceDetailData),
+                    requiredLength,
+                    byref(requiredLength),
+                    byref(pNode.DeviceInfoData),
+                )
+                if not success:
                     error = GetLastError()
                     if DEBUG:
-                        print(error)
+                        log.error(error)
                 if success:
-                    didd_cb_sizes = (cb_size, )
+                    didd_cb_sizes = (cb_size,)
                     pNode.DeviceDetailData.cbSize = requiredLength.value
                     break
-                #define ERROR_INVALID_USER_BUFFER        1784L
-                #define ERROR_INSUFFICIENT_BUFFER        122L    # dderror
+                # define ERROR_INVALID_USER_BUFFER        1784L
+                # define ERROR_INSUFFICIENT_BUFFER        122L    # dderror
 
-
-
-            if (not success):
-                #FreeDeviceInfoNode(byref(pNode))
+            if not success:
+                # FreeDeviceInfoNode(byref(pNode))
                 pNode = None
                 raise Exception("OOPS")
                 break
 
-
             DeviceList.append(pNode)
 
     return DeviceList
-
-
 
 
 def InspectUsbDevices() -> Tuple[Dict[str, USBDEVICEINFO], List]:
@@ -296,88 +312,90 @@ def InspectUsbDevices() -> Tuple[Dict[str, USBDEVICEINFO], List]:
 
     # Iterate over host controllers using the new GUID based interface
     #
-    deviceInfo = SetupDiGetClassDevs(byref(GUID_CLASS_USB_HOST_CONTROLLER),
-                                     NULL,
-                                     NULL,
-                                     (DIGCF_PRESENT | DIGCF_DEVICEINTERFACE))
+    deviceInfo = SetupDiGetClassDevs(
+        byref(GUID_CLASS_USB_HOST_CONTROLLER),
+        NULL,
+        NULL,
+        (DIGCF_PRESENT | DIGCF_DEVICEINTERFACE),
+    )
 
     deviceInfoData.cbSize = sizeof(SP_DEVINFO_DATA)
 
     full_tree = []
     index = 0
-    while SetupDiEnumDeviceInfo(deviceInfo,
-                               index,
-                               byref(deviceInfoData)):
+    while SetupDiEnumDeviceInfo(deviceInfo, index, byref(deviceInfoData)):
         index += 1
         deviceInterfaceData.cbSize = sizeof(SP_DEVICE_INTERFACE_DATA)
 
         devInterfaceIndex = 0
-        while SetupDiEnumDeviceInterfaces(deviceInfo,
-                                        byref(deviceInfoData),
-                                        byref(GUID_CLASS_USB_HOST_CONTROLLER),
-                                        devInterfaceIndex,
-                                        byref(deviceInterfaceData)):
+        while SetupDiEnumDeviceInterfaces(
+            deviceInfo,
+            byref(deviceInfoData),
+            byref(GUID_CLASS_USB_HOST_CONTROLLER),
+            devInterfaceIndex,
+            byref(deviceInterfaceData),
+        ):
             devInterfaceIndex += 1
-            success = SetupDiGetDeviceInterfaceDetail(deviceInfo,
-                                                      byref(deviceInterfaceData),
-                                                      NULL,
-                                                      0,
-                                                      byref(requiredLength),
-                                                      NULL)
+            success = SetupDiGetDeviceInterfaceDetail(
+                deviceInfo,
+                byref(deviceInterfaceData),
+                NULL,
+                0,
+                byref(requiredLength),
+                NULL,
+            )
 
-            if (not success and GetLastError() != ERROR_INSUFFICIENT_BUFFER):
+            if not success and GetLastError() != ERROR_INSUFFICIENT_BUFFER:
                 raise Exception("OOPS")
                 break
 
             resize(deviceDetailData, requiredLength.value)
             # deviceDetailData = ALLOC(requiredLength)
-            if (deviceDetailData == NULL):
+            if deviceDetailData == NULL:
                 raise Exception("OOPS")
                 break
-
 
             global didd_cb_sizes
             deviceDetailData.cbSize = didd_cb_sizes[0]
 
-            success = SetupDiGetDeviceInterfaceDetail(deviceInfo,
-                                                      byref(deviceInterfaceData),
-                                                      byref(deviceDetailData),
-                                                      requiredLength,
-                                                      byref(requiredLength),
-                                                      NULL)
+            success = SetupDiGetDeviceInterfaceDetail(
+                deviceInfo,
+                byref(deviceInterfaceData),
+                byref(deviceDetailData),
+                requiredLength,
+                byref(requiredLength),
+                NULL,
+            )
 
-            if (not success):
+            if not success:
                 error = GetLastError()
                 raise Exception("OOPS")
                 break
 
-
-            hHCDev = CreateFile(str(deviceDetailData),
-                                GENERIC_WRITE,
-                                FILE_SHARE_WRITE,
-                                NULL,
-                                OPEN_EXISTING,
-                                0,
-                                NULL)
+            hHCDev = CreateFile(
+                str(deviceDetailData),
+                GENERIC_WRITE,
+                FILE_SHARE_WRITE,
+                NULL,
+                OPEN_EXISTING,
+                0,
+                NULL,
+            )
 
             # If the handle is valid, then we've successfully opened a Host
             # Controller.  Display some info about the Host Controller itself,
             # then enumerate the Root Hub attached to the Host Controller.
             #
 
-            if (hHCDev != INVALID_HANDLE_VALUE):
-                items = EnumerateHostController(hHCDev,
-                                        str(deviceDetailData),
-                                        deviceInfo,
-                                        deviceInfoData)
+            if hHCDev != INVALID_HANDLE_VALUE:
+                items = EnumerateHostController(
+                    hHCDev, str(deviceDetailData), deviceInfo, deviceInfoData
+                )
 
                 CloseHandle(hHCDev)
                 full_tree.append(items)
 
-
             # FREE(deviceDetailData)
-
-
 
     SetupDiDestroyDeviceInfoList(deviceInfo)
 
@@ -387,10 +405,7 @@ def InspectUsbDevices() -> Tuple[Dict[str, USBDEVICEINFO], List]:
 
 
 def EnumerateHostController(
-    hHCDev: HANDLE,
-    leafName: str,
-    deviceInfo: HANDLE,
-    deviceInfoData: SP_DEVINFO_DATA
+    hHCDev: HANDLE, leafName: str, deviceInfo: HANDLE, deviceInfoData: SP_DEVINFO_DATA
 ):
     driverKeyName = PCHAR()
     hHCItem = list()
@@ -403,13 +418,12 @@ def EnumerateHostController(
     deviceAndFunction = ULONG()
     DevProps = USB_DEVICE_PNP_STRINGS()
 
-
     # Allocate a structure to hold information about this host controller.
     #
     # hcInfo = (USBHOSTCONTROLLERINFO)ALLOC(sizeof(USBHOSTCONTROLLERINFO))
 
     # just return if could not alloc memory
-    if (NULL == hcInfo):
+    if NULL == hcInfo:
         return
 
     hcInfo.DeviceInfoType = USBDEVICEINFOTYPE.HostControllerInfo
@@ -418,7 +432,7 @@ def EnumerateHostController(
     #
     driverKeyName = GetHCDDriverKeyName(hHCDev)
 
-    if (NULL == driverKeyName):
+    if NULL == driverKeyName:
         # Failure obtaining driver key name.
         raise Exception("OOPS")
         FREE(hcInfo)
@@ -442,7 +456,7 @@ def EnumerateHostController(
     #         # FREE(hcInfo)
     #         return
 
-        # listEntry = listEntry.Flink
+    # listEntry = listEntry.Flink
 
     # Obtain host controller device properties:
     cbDriverName = len(driverKeyName)
@@ -482,31 +496,34 @@ def EnumerateHostController(
     # if (ERROR_SUCCESS != dwSuccess):
     #     raise Exception("OOPS")
 
-
     # Get bus, device, and function
     #
     hcInfo.BusDeviceFunctionValid = False
 
-    success = SetupDiGetDeviceRegistryProperty(deviceInfo,
-                                            deviceInfoData,
-                                            SPDRP_BUSNUMBER,
-                                            NULL,
-                                            byref(hcInfo.BusNumber),
-                                            sizeof(hcInfo.BusNumber),
-                                            NULL)
+    success = SetupDiGetDeviceRegistryProperty(
+        deviceInfo,
+        deviceInfoData,
+        SPDRP_BUSNUMBER,
+        NULL,
+        byref(hcInfo.BusNumber),
+        sizeof(hcInfo.BusNumber),
+        NULL,
+    )
 
-    if (success):
-        success = SetupDiGetDeviceRegistryProperty(deviceInfo,
-                                                deviceInfoData,
-                                                SPDRP_ADDRESS,
-                                                NULL,
-                                                byref(deviceAndFunction),
-                                                sizeof(deviceAndFunction),
-                                                NULL)
+    if success:
+        success = SetupDiGetDeviceRegistryProperty(
+            deviceInfo,
+            deviceInfoData,
+            SPDRP_ADDRESS,
+            NULL,
+            byref(deviceAndFunction),
+            sizeof(deviceAndFunction),
+            NULL,
+        )
 
-    if (success):
+    if success:
         hcInfo.BusDevice = deviceAndFunction.value >> 16
-        hcInfo.BusFunction = deviceAndFunction.value & 0xffff
+        hcInfo.BusFunction = deviceAndFunction.value & 0xFFFF
         hcInfo.BusDeviceFunctionValid = True
 
     # Get the USB Host Controller info
@@ -550,29 +567,30 @@ def EnumerateHostController(
         # hr = StringCbLength(rootHubName, MAX_DRIVER_KEY_NAME, byref(cbHubName))
         cbHubName = len(rootHubName)
         # if (SUCCEEDED(hr)):
-        EnumerateHub(hHCItem,
-                    rootHubName,
-                    cbHubName,
-                    NULL,       # ConnectionInfo
-                    # NULL,       # ConnectionInfoV2
-                    # NULL,       # PortConnectorProps
-                    NULL,       # ConfigDesc
-                    # NULL,       # BosDesc
-                    NULL,       # StringDescs
-                    NULL,       # Strings
-                    NULL)      # We do not pass DevProps for RootHub
+        EnumerateHub(
+            hHCItem,
+            rootHubName,
+            cbHubName,
+            NULL,  # ConnectionInfo
+            # NULL,       # ConnectionInfoV2
+            # NULL,       # PortConnectorProps
+            NULL,  # ConfigDesc
+            # NULL,       # BosDesc
+            NULL,  # StringDescs
+            NULL,  # Strings
+            NULL,
+        )  # We do not pass DevProps for RootHub
     # else:
     #     # Failure obtaining root hub name.
 
-        # raise Exception("OOPS")
+    # raise Exception("OOPS")
 
     return hHCItem
 
 
 def DriverNameToDeviceProperties(
-        DriverName: str,
-        cbDriverName: int
-        ) -> USB_DEVICE_PNP_STRINGS:
+    DriverName: str, cbDriverName: int
+) -> USB_DEVICE_PNP_STRINGS:
 
     # deviceInfo = HDEVINFO()
     # deviceInfoData = SP_DEVINFO_DATA()
@@ -584,27 +602,26 @@ def DriverNameToDeviceProperties(
     # Allocate device propeties structure
     # DevProps = (USB_DEVICE_PNP_STRINGS) ALLOC(sizeof(USB_DEVICE_PNP_STRINGS))
 
-    if(NULL == DevProps):
+    if NULL == DevProps:
         status = FALSE
         error = GetLastError()
         if DEBUG:
-            print(WinError(get_last_error()))
-
+            log.error(WinError(get_last_error()))
 
     # Get device instance
-    status, deviceInfo, deviceInfoData = DriverNameToDeviceInst(DriverName, cbDriverName) #, byref(deviceInfo), byref(deviceInfoData))
-    if (not status):
-        #goto Done
+    status, deviceInfo, deviceInfoData = DriverNameToDeviceInst(
+        DriverName, cbDriverName
+    )  # , byref(deviceInfo), byref(deviceInfoData))
+    if not status:
+        # goto Done
         error = GetLastError()
         if DEBUG:
-            print(WinError(get_last_error()))
-
+            log.error(WinError(get_last_error()))
 
     # When device is not attached this matches the usbipd InstanceID
     # Once attached however the VID/PID elements change to relate to the
     # "filter driver" ?? so can no longer be used to match usbipd ids.
     DevProps.DeviceId = GetInstanceId(deviceInfo, deviceInfoData)
-
 
     # status = GetDeviceProperty(deviceInfo,
     #                            byref(deviceInfoData),
@@ -614,40 +631,37 @@ def DriverNameToDeviceProperties(
     # if (not status):
     #     #goto Done
     #     error = GetLastError()
-    #     print(WinError(get_last_error()))
+    #     log.error(WinError(get_last_error()))
 
+    #     #
+    #     # We don't fail if the following registry query fails as these fields are additional information only
+    #     #
 
+    #     GetDeviceProperty(deviceInfo,
+    #                       byref(deviceInfoData),
+    #                       SPDRP_HARDWAREID,
+    #                       byref(DevProps.HwId))
 
-#     #
-#     # We don't fail if the following registry query fails as these fields are additional information only
-#     #
+    #     GetDeviceProperty(deviceInfo,
+    #                       byref(deviceInfoData),
+    #                       SPDRP_SERVICE,
+    #                       byref(DevProps.Service))
 
-#     GetDeviceProperty(deviceInfo,
-#                       byref(deviceInfoData),
-#                       SPDRP_HARDWAREID,
-#                       byref(DevProps.HwId))
+    #     GetDeviceProperty(deviceInfo,
+    #                        byref(deviceInfoData),
+    #                        SPDRP_CLASS,
+    #                        byref(DevProps.DeviceClass))
+    # Done:
 
-#     GetDeviceProperty(deviceInfo,
-#                       byref(deviceInfoData),
-#                       SPDRP_SERVICE,
-#                       byref(DevProps.Service))
+    #     if (deviceInfo != INVALID_HANDLE_VALUE):
+    #         SetupDiDestroyDeviceInfoList(deviceInfo)
 
-#     GetDeviceProperty(deviceInfo,
-#                        byref(deviceInfoData),
-#                        SPDRP_CLASS,
-#                        byref(DevProps.DeviceClass))
-# Done:
-
-#     if (deviceInfo != INVALID_HANDLE_VALUE):
-#         SetupDiDestroyDeviceInfoList(deviceInfo)
-
-
-#     if (not status):
-#         if (DevProps != NULL):
-#             FreeDeviceProperties(byref(DevProps))
-
+    #     if (not status):
+    #         if (DevProps != NULL):
+    #             FreeDeviceProperties(byref(DevProps))
 
     return DevProps
+
 
 # def GetHostControllerInfo(
 #     hHCDev: HANDLE,
@@ -693,31 +707,31 @@ def DriverNameToDeviceProperties(
 
 #     return dwError
 
-def GetRootHubName (
-    HostController: HANDLE
-):
+
+def GetRootHubName(HostController: HANDLE):
     success = BOOL(0)
     nBytes = ULONG(0)
-    rootHubName = USB_ROOT_HUB_NAME() #
-    rootHubNameW = USB_ROOT_HUB_NAME() # = NULL
-    rootHubNameA = PCHAR() # = NULL
+    rootHubName = USB_ROOT_HUB_NAME()  #
+    rootHubNameW = USB_ROOT_HUB_NAME()  # = NULL
+    rootHubNameA = PCHAR()  # = NULL
 
     # Get the length of the name of the Root Hub attached to the
     # Host Controller
     #
-    success = DeviceIoControl(HostController,
-                              IOCTL_USB_GET_ROOT_HUB_NAME,
-                              0,
-                              0,
-                              byref(rootHubName),
-                              sizeof(rootHubName),
-                              byref(nBytes),
-                              NULL)
+    success = DeviceIoControl(
+        HostController,
+        IOCTL_USB_GET_ROOT_HUB_NAME,
+        0,
+        0,
+        byref(rootHubName),
+        sizeof(rootHubName),
+        byref(nBytes),
+        NULL,
+    )
 
     if not success:
         raise Exception("OOPS")
         # goto GetRootHubNameError
-
 
     # Allocate space to hold the Root Hub name
     #
@@ -725,25 +739,25 @@ def GetRootHubName (
 
     # rootHubNameW = ALLOC(nBytes)
     resize(rootHubNameW, nBytes.value)
-    if (rootHubNameW == NULL):
+    if rootHubNameW == NULL:
         raise Exception("OOPS")
         # goto GetRootHubNameError
-
 
     # Get the name of the Root Hub attached to the Host Controller
     #
-    success = DeviceIoControl(HostController,
-                              IOCTL_USB_GET_ROOT_HUB_NAME,
-                              NULL,
-                              0,
-                              byref(rootHubNameW),
-                              nBytes,
-                              byref(nBytes),
-                              NULL)
+    success = DeviceIoControl(
+        HostController,
+        IOCTL_USB_GET_ROOT_HUB_NAME,
+        NULL,
+        0,
+        byref(rootHubNameW),
+        nBytes,
+        byref(nBytes),
+        NULL,
+    )
     if not success:
         raise Exception("OOPS")
         # goto GetRootHubNameError
-
 
     return str(rootHubNameW)
     # # Convert the Root Hub name
@@ -757,6 +771,7 @@ def GetRootHubName (
 
     # return rootHubNameA
 
+
 # GetRootHubNameError:
 #     # There was an error, free anything that was allocated
 #     #
@@ -766,7 +781,8 @@ def GetRootHubName (
 
 #     return NULL
 
-def EnumerateHub (
+
+def EnumerateHub(
     hTreeParent: List,
     HubName: str,
     cbHubName: int,
@@ -777,8 +793,8 @@ def EnumerateHub (
     # BosDesc: USB_DESCRIPTOR_REQUEST,
     StringDescs: List[STRING_DESCRIPTOR_NODE],
     Strings: dict,
-    DevProps: USB_DEVICE_PNP_STRINGS
-    ):
+    DevProps: USB_DEVICE_PNP_STRINGS,
+):
     # Initialize locals to not allocated state so the error cleanup routine
     # only tries to cleanup things that were successfully allocated.
     #
@@ -802,10 +818,9 @@ def EnumerateHub (
     # initializes the structure for us.
     #
     # info = ALLOC(sizeof(USBEXTERNALHUBINFO))
-# if (info == NULL):
-#         raise Exception("OOPS")
-#         goto EnumerateHubError
-
+    # if (info == NULL):
+    #         raise Exception("OOPS")
+    #         goto EnumerateHubError
 
     # Allocate some space for a USB_NODE_INFORMATION structure for this Hub
     #
@@ -814,29 +829,26 @@ def EnumerateHub (
     #     raise Exception("OOPS")
     #     goto EnumerateHubError
 
-
     # hubInfoEx = (USB_HUB_INFORMATION_EX)ALLOC(sizeof(USB_HUB_INFORMATION_EX))
     # if (hubInfoEx == NULL):
     #     raise Exception("OOPS")
     #     goto EnumerateHubError
-
 
     # hubCapabilityEx = (USB_HUB_CAPABILITIES_EX)ALLOC(sizeof(USB_HUB_CAPABILITIES_EX))
     # if(hubCapabilityEx == NULL):
     #     raise Exception("OOPS")
     #     goto EnumerateHubError
 
-
     # Keep copies of the Hub Name, Connection Info, and Configuration
     # Descriptor pointers
     #
-    info_ex.HubInfo   = hubInfo
-    info_ex.HubName   = HubName
+    info_ex.HubInfo = hubInfo
+    info_ex.HubName = HubName
 
-    info_root.HubInfo   = hubInfo
-    info_root.HubName   = HubName
+    info_root.HubInfo = hubInfo
+    info_root.HubName = HubName
 
-    if (ConnectionInfo != NULL):
+    if ConnectionInfo != NULL:
         info_ex.DeviceInfoType = USBDEVICEINFOTYPE.ExternalHubInfo
         info_ex.ConnectionInfo = ConnectionInfo
         info_ex.ConfigDesc = ConfigDesc
@@ -871,7 +883,6 @@ def EnumerateHub (
     #     raise Exception("OOPS")
     #     # goto EnumerateHubError
 
-
     # Create the full hub device name
     #
     # deviceName = "\\\\.\\" + HubName
@@ -884,47 +895,42 @@ def EnumerateHub (
     #     goto EnumerateHubError
     deviceName = "\\\\.\\" + HubName
 
-
     # Try to hub the open device
     #
-    hHubDevice = CreateFile(deviceName,
-                            GENERIC_WRITE,
-                            FILE_SHARE_WRITE,
-                            NULL,
-                            OPEN_EXISTING,
-                            0,
-                            NULL)
+    hHubDevice = CreateFile(
+        deviceName, GENERIC_WRITE, FILE_SHARE_WRITE, NULL, OPEN_EXISTING, 0, NULL
+    )
 
     # Done with temp buffer for full hub device name
     #
     # FREE(deviceName)
 
-    if (hHubDevice == INVALID_HANDLE_VALUE):
+    if hHubDevice == INVALID_HANDLE_VALUE:
         raise Exception("OOPS")
         # goto EnumerateHubError
-
 
     #
     # Now query USBHUB for the USB_NODE_INFORMATION structure for this hub.
     # This will tell us the number of downstream ports to enumerate, among
     # other things.
     #
-    success = DeviceIoControl(hHubDevice,
-                              IOCTL_USB_GET_NODE_INFORMATION,
-                              byref(hubInfo),
-                              sizeof(USB_NODE_INFORMATION),
-                              byref(hubInfo),
-                              sizeof(USB_NODE_INFORMATION),
-                              byref(nBytes),
-                              NULL)
+    success = DeviceIoControl(
+        hHubDevice,
+        IOCTL_USB_GET_NODE_INFORMATION,
+        byref(hubInfo),
+        sizeof(USB_NODE_INFORMATION),
+        byref(hubInfo),
+        sizeof(USB_NODE_INFORMATION),
+        byref(nBytes),
+        NULL,
+    )
 
     if not success:
         error = GetLastError()
         if DEBUG:
-            print(WinError(get_last_error()))
+            log.error(WinError(get_last_error()))
         raise Exception("OOPS")
         # goto EnumerateHubError
-
 
     # success = DeviceIoControl(hHubDevice,
     #                           IOCTL_USB_GET_HUB_INFORMATION_EX,
@@ -946,8 +952,6 @@ def EnumerateHub (
 
     #     else:
     #         ((USBROOTHUBINFO)info).HubInfoEx = NULL
-
-
 
     #
     # Obtain Hub Capabilities
@@ -973,8 +977,6 @@ def EnumerateHub (
     #     else:
     #         ((USBROOTHUBINFO)info).HubCapabilityEx = NULL
 
-
-
     # Build the leaf name from the port number and the device description
     #
     if ConnectionInfo:
@@ -993,7 +995,6 @@ def EnumerateHub (
     #         " :  ",
     #         sizeof(" :  "))
 
-
     if DevProps and DevProps.DeviceDesc:
         # size_t cbDeviceDesc = 0
         # hr = StringCbLength(DevProps.DeviceDesc, MAX_DRIVER_KEY_NAME, byref(cbDeviceDesc))
@@ -1005,7 +1006,7 @@ def EnumerateHub (
         leafName += str(DevProps.DeviceDesc)
 
     else:
-        if(ConnectionInfo != NULL):
+        if ConnectionInfo != NULL:
             # External hub
             leafName += "ExternalHub"
 
@@ -1016,9 +1017,6 @@ def EnumerateHub (
             #         dwSizeOfLeafName,
             #         "RootHub",
             #         sizeof("RootHub"))
-
-
-
 
     # Now add an item to the TreeView with the USBDEVICEINFO pointer info
     # as the LPARAM reference value containing everything we know about the
@@ -1035,24 +1033,17 @@ def EnumerateHub (
     children = []
     hTreeParent.append((leafName, info, children))
 
-
     # Now recursively enumerate the ports of this hub.
     #
     EnumerateHubPorts(
-        children,
-        hHubDevice,
-        hubInfo.u.HubInformation.HubDescriptor.bNumberOfPorts
-        )
-
+        children, hHubDevice, hubInfo.u.HubInformation.HubDescriptor.bNumberOfPorts
+    )
 
     CloseHandle(hHubDevice)
     return
 
-def EnumerateHubPorts (
-    hTreeParent: List,
-    hHubDevice: HANDLE,
-    bNumPorts: bytes
-):
+
+def EnumerateHubPorts(hTreeParent: List, hHubDevice: HANDLE, bNumPorts: bytes):
     index = ULONG(0)
     success = BOOL(0)
     NumPorts = ord(bNumPorts)
@@ -1067,7 +1058,7 @@ def EnumerateHubPorts (
     # portConnectorProps = USB_PORT_CONNECTOR_PROPERTIES()
     configDescReq = USB_DESCRIPTOR_REQUEST()
     # bosDesc = USB_DESCRIPTOR_REQUEST()
-    stringDescs: List[STRING_DESCRIPTOR_NODE] = [] #STRING_DESCRIPTOR_NODE()
+    stringDescs: List[STRING_DESCRIPTOR_NODE] = []  # STRING_DESCRIPTOR_NODE()
     info = USBDEVICEINFO()
     # connectionInfoExV2 = USB_NODE_CONNECTION_INFORMATION_EX_V2()
     pNode = DEVICE_INFO_NODE()
@@ -1076,7 +1067,7 @@ def EnumerateHubPorts (
     #
     # Port indices are 1 based, not 0 based.
     #
-    for index in range(1, NumPorts+1):
+    for index in range(1, NumPorts + 1):
         nBytesEx = 0
         nBytes = 0
 
@@ -1107,12 +1098,14 @@ def EnumerateHubPorts (
         # Should probably size this dynamically at some point.
         #
 
-        nBytesEx = DWORD(sizeof(USB_NODE_CONNECTION_INFORMATION_EX) + (sizeof(USB_PIPE_INFO) * 30))
+        nBytesEx = DWORD(
+            sizeof(USB_NODE_CONNECTION_INFORMATION_EX) + (sizeof(USB_PIPE_INFO) * 30)
+        )
 
         connectionInfoEx = USB_NODE_CONNECTION_INFORMATION_EX()
         resize(connectionInfoEx, nBytesEx.value)
 
-        if (connectionInfoEx == NULL):
+        if connectionInfoEx == NULL:
             raise Exception("OOPS")
             break
 
@@ -1123,7 +1116,6 @@ def EnumerateHubPorts (
         #     raise Exception("OOPS")
         #     FREE(connectionInfoEx)
         #     break
-
 
         #
         # Now query USBHUB for the structures
@@ -1163,9 +1155,6 @@ def EnumerateHubPorts (
         #             FREE(pPortConnectorProps)
         #             pPortConnectorProps = NULL
 
-
-
-
         # connectionInfoExV2.ConnectionIndex = index
         # connectionInfoExV2.Length = sizeof(USB_NODE_CONNECTION_INFORMATION_EX_V2)
         # connectionInfoExV2.SupportedUsbProtocols.Usb300 = 1
@@ -1183,33 +1172,33 @@ def EnumerateHubPorts (
         #     FREE(connectionInfoExV2)
         #     connectionInfoExV2 = NULL
 
-
         connectionInfoEx.ConnectionIndex = DWORD(index)
 
-        success = DeviceIoControl(hHubDevice,
-                                  IOCTL_USB_GET_NODE_CONNECTION_INFORMATION_EX,
-                                  byref(connectionInfoEx),
-                                  nBytesEx,
-                                  byref(connectionInfoEx),
-                                  nBytesEx,
-                                  byref(nBytesEx),
-                                  NULL)
+        success = DeviceIoControl(
+            hHubDevice,
+            IOCTL_USB_GET_NODE_CONNECTION_INFORMATION_EX,
+            byref(connectionInfoEx),
+            nBytesEx,
+            byref(connectionInfoEx),
+            nBytesEx,
+            byref(nBytesEx),
+            NULL,
+        )
 
         # if (success):
-            #
-            # Since the USB_NODE_CONNECTION_INFORMATION_EX is used to display
-            # the device speed, but the hub driver doesn't support indication
-            # of superspeed, we overwrite the value if the super speed
-            # data structures are available and indicate the device is operating
-            # at SuperSpeed.
-            #
+        #
+        # Since the USB_NODE_CONNECTION_INFORMATION_EX is used to display
+        # the device speed, but the hub driver doesn't support indication
+        # of superspeed, we overwrite the value if the super speed
+        # data structures are available and indicate the device is operating
+        # at SuperSpeed.
+        #
 
-            # if (connectionInfoEx.Speed == UsbHighSpeed
-            #     && connectionInfoExV2 != NULL
-            #     && (connectionInfoExV2.Flags.DeviceIsOperatingAtSuperSpeedOrHigher ||
-            #         connectionInfoExV2.Flags.DeviceIsOperatingAtSuperSpeedPlusOrHigher)):
-            #     connectionInfoEx.Speed = UsbSuperSpeed
-
+        # if (connectionInfoEx.Speed == UsbHighSpeed
+        #     && connectionInfoExV2 != NULL
+        #     && (connectionInfoExV2.Flags.DeviceIsOperatingAtSuperSpeedOrHigher ||
+        #         connectionInfoExV2.Flags.DeviceIsOperatingAtSuperSpeedPlusOrHigher)):
+        #     connectionInfoEx.Speed = UsbSuperSpeed
 
         if not success:
             connectionInfo = USB_NODE_CONNECTION_INFORMATION()
@@ -1218,11 +1207,13 @@ def EnumerateHubPorts (
             # instead of IOCTL_USB_GET_NODE_CONNECTION_INFORMATION_EX
             #
 
-            nBytes = DWORD(sizeof(USB_NODE_CONNECTION_INFORMATION) + sizeof(USB_PIPE_INFO) * 30)
+            nBytes = DWORD(
+                sizeof(USB_NODE_CONNECTION_INFORMATION) + sizeof(USB_PIPE_INFO) * 30
+            )
 
             resize(connectionInfo, nBytes.value)
 
-            if (connectionInfo == NULL):
+            if connectionInfo == NULL:
                 raise Exception("OOPS")
 
                 # FREE(connectionInfoEx)
@@ -1234,17 +1225,18 @@ def EnumerateHubPorts (
 
                 # continue
 
-
             connectionInfo.ConnectionIndex = index
 
-            success = DeviceIoControl(hHubDevice,
-                                      IOCTL_USB_GET_NODE_CONNECTION_INFORMATION,
-                                      byref(connectionInfo),
-                                      nBytes,
-                                      byref(connectionInfo),
-                                      nBytes,
-                                      byref(nBytes),
-                                      NULL)
+            success = DeviceIoControl(
+                hHubDevice,
+                IOCTL_USB_GET_NODE_CONNECTION_INFORMATION,
+                byref(connectionInfo),
+                nBytes,
+                byref(connectionInfo),
+                nBytes,
+                byref(nBytes),
+                NULL,
+            )
 
             if not success:
                 raise Exception("OOPS")
@@ -1259,13 +1251,14 @@ def EnumerateHubPorts (
 
                 # continue
 
-
             # Copy IOCTL_USB_GET_NODE_CONNECTION_INFORMATION into
             # IOCTL_USB_GET_NODE_CONNECTION_INFORMATION_EX structure.
             #
             connectionInfoEx.ConnectionIndex = connectionInfo.ConnectionIndex
             connectionInfoEx.DeviceDescriptor = connectionInfo.DeviceDescriptor
-            connectionInfoEx.CurrentConfigurationValue = connectionInfo.CurrentConfigurationValue
+            connectionInfoEx.CurrentConfigurationValue = (
+                connectionInfo.CurrentConfigurationValue
+            )
             # connectionInfoEx.Speed = connectionInfo.LowSpeed ? UsbLowSpeed : UsbFullSpeed
             connectionInfoEx.DeviceIsHub = connectionInfo.DeviceIsHub
             connectionInfoEx.DeviceAddress = connectionInfo.DeviceAddress
@@ -1273,56 +1266,57 @@ def EnumerateHubPorts (
             connectionInfoEx.ConnectionStatus = connectionInfo.ConnectionStatus
 
             # memcpy(&connectionInfoEx.PipeList[0],
-                #    &connectionInfo.PipeList[0],
-                #    sizeof(USB_PIPE_INFO) * 30)
+            #    &connectionInfo.PipeList[0],
+            #    sizeof(USB_PIPE_INFO) * 30)
             connectionInfoEx.PipeList = connectionInfo.PipeList
 
             # FREE(connectionInfo)
 
-
         # Update the count of connected devices
         #
-        if (connectionInfoEx.ConnectionStatus == USB_CONNECTION_STATUS.DeviceConnected):
+        if connectionInfoEx.ConnectionStatus == USB_CONNECTION_STATUS.DeviceConnected:
             global TotalDevicesConnected
             TotalDevicesConnected += 1
 
-
-        if (connectionInfoEx.DeviceIsHub):
+        if connectionInfoEx.DeviceIsHub:
             global TotalHubs
             TotalHubs += 1
 
-
         # If there is a device connected, get the Device Description
         #
-        if (connectionInfoEx.ConnectionStatus != USB_CONNECTION_STATUS.NoDeviceConnected):
-            driverKeyName = GetDriverKeyName(hHubDevice, index)
+        if connectionInfoEx.ConnectionStatus != USB_CONNECTION_STATUS.NoDeviceConnected:
+            try:
+                driverKeyName = GetDriverKeyName(hHubDevice, index)
+            except OSError as err:
+                name = f"{connectionInfoEx.DeviceDescriptor.idVendor:04X}:{connectionInfoEx.DeviceDescriptor.idProduct:04X}"
+                log.debug(f"Failed to query {name}: {err}")
+                driverKeyName = ""
 
-            if (driverKeyName):
+            if driverKeyName:
                 cbDriverName = len(driverKeyName)
 
                 # hr = StringCbLength(driverKeyName, MAX_DRIVER_KEY_NAME, byref(cbDriverName))
                 # if (SUCCEEDED(hr)):
                 DevProps = DriverNameToDeviceProperties(driverKeyName, cbDriverName)
-                pNode = FindMatchingDeviceNodeForDriverName(driverKeyName, connectionInfoEx.DeviceIsHub)
+                pNode = FindMatchingDeviceNodeForDriverName(
+                    driverKeyName, connectionInfoEx.DeviceIsHub
+                )
 
             #     FREE(driverKeyName)
-
-
-
 
         # If there is a device connected to the port, try to retrieve the
         # Configuration Descriptor from the device.
         #
-        if (#gDoConfigDesc &&
-            connectionInfoEx.ConnectionStatus == USB_CONNECTION_STATUS.DeviceConnected):
-            configDescBuff = GetConfigDescriptor(hHubDevice,
-                                             index,
-                                             0)
-            configDescReq = cast(byref(configDescBuff), PUSB_DESCRIPTOR_REQUEST).contents
+        if (  # gDoConfigDesc &&
+            connectionInfoEx.ConnectionStatus == USB_CONNECTION_STATUS.DeviceConnected
+        ):
+            configDescBuff = GetConfigDescriptor(hHubDevice, index, 0)
+            configDescReq = cast(
+                byref(configDescBuff), PUSB_DESCRIPTOR_REQUEST
+            ).contents
 
         else:
             configDescReq = NULL
-
 
         # if (configDesc != NULL &&
         #     connectionInfoEx.DeviceDescriptor.bcdUSB > 0x0200):
@@ -1331,48 +1325,60 @@ def EnumerateHubPorts (
 
         # else:
         #     bosDesc = NULL
+        stringDescs = []
+        Strings = {}
         if configDescReq:
-            configDesc = cast(byref(configDescReq.Data), PUSB_CONFIGURATION_DESCRIPTOR).contents
+            configDesc = cast(
+                byref(configDescReq.Data), PUSB_CONFIGURATION_DESCRIPTOR
+            ).contents
 
-        if (configDescReq and AreThereStringDescriptors(connectionInfoEx.DeviceDescriptor, configDesc)):
-            stringDescs, Strings = GetAllStringDescriptors (
-                              hHubDevice,
-                              index,
-                              connectionInfoEx.DeviceDescriptor,
-                              #byref(connectionInfoEx, type(connectionInfoEx).DeviceDescriptor.offset),
-                              configDesc)
-
-        else:
-            stringDescs = []
-            Strings = {}
-
+        if (
+            not connectionInfoEx.DeviceIsHub
+            and configDescReq
+            and AreThereStringDescriptors(connectionInfoEx.DeviceDescriptor, configDesc)
+        ):
+            try:
+                stringDescs, Strings = GetAllStringDescriptors(
+                    hHubDevice,
+                    index,
+                    connectionInfoEx.DeviceDescriptor,
+                    # byref(connectionInfoEx, type(connectionInfoEx).DeviceDescriptor.offset),
+                    configDesc,
+                )
+            except AttributeError as ex:
+                name = (
+                    str(pNode.DeviceDetailData)
+                    if pNode
+                    else f"{connectionInfoEx.DeviceDescriptor.idVendor:04X}:{connectionInfoEx.DeviceDescriptor.idProduct:04X}"
+                )
+                log.debug(f"{ex}: {name}")
 
         # If the device connected to the port is an external hub, get the
         # name of the external hub and recursively enumerate it.
         #
-        if (connectionInfoEx.DeviceIsHub):
+        if connectionInfoEx.DeviceIsHub:
             extHubName = ""
             cbHubName = 0
 
             extHubName = GetExternalHubName(hHubDevice, index)
             # extHubName = ""
             if extHubName:
-            # hr = StringCbLength(extHubName, MAX_DRIVER_KEY_NAME, byref(cbHubName))
-            # if (SUCCEEDED(hr)):
-            # cbHubName = len(extHubName)
-                EnumerateHub(hTreeParent, #hPortItem,
-                            extHubName,
-                            cbHubName,
-                            connectionInfoEx,
-                            # connectionInfoExV2,
-                            # pPortConnectorProps,
-                            configDescReq,
-                            # bosDesc,
-                            stringDescs,
-                            Strings,
-                            DevProps)
-
-
+                # hr = StringCbLength(extHubName, MAX_DRIVER_KEY_NAME, byref(cbHubName))
+                # if (SUCCEEDED(hr)):
+                # cbHubName = len(extHubName)
+                EnumerateHub(
+                    hTreeParent,  # hPortItem,
+                    extHubName,
+                    cbHubName,
+                    connectionInfoEx,
+                    # connectionInfoExV2,
+                    # pPortConnectorProps,
+                    configDescReq,
+                    # bosDesc,
+                    stringDescs,
+                    Strings,
+                    DevProps,
+                )
 
         else:
             # Allocate some space for a USBDEVICEINFO structure to hold the
@@ -1382,7 +1388,7 @@ def EnumerateHubPorts (
             # info = (USBDEVICEINFO) ALLOC(sizeof(USBDEVICEINFO))
             info = USBDEVICEINFO()
 
-            if (info == NULL):
+            if info == NULL:
                 raise Exception("OOPS")
                 # if (configDesc != NULL):
                 #     FREE(configDesc)
@@ -1400,7 +1406,6 @@ def EnumerateHubPorts (
 
                 # break
 
-
             info.DeviceInfoType = USBDEVICEINFOTYPE.DeviceInfo
             info.ConnectionInfo = connectionInfoEx
             # info.PortConnectorProps = pPortConnectorProps
@@ -1410,7 +1415,7 @@ def EnumerateHubPorts (
             # info.BosDesc = bosDesc
             # info.ConnectionInfoV2 = connectionInfoExV2
             info.UsbDeviceProperties = DevProps
-            # info.DeviceInfoNode = pNode
+            info.DeviceInfoNode = pNode
 
             # StringCchPrintf(leafName, sizeof(leafName), "[Port%d] ", index)
             leafName = f"[Port{index}] "
@@ -1420,7 +1425,7 @@ def EnumerateHubPorts (
             #     sizeof(leafName),
             #     ConnectionStatuses[connectionInfoEx.ConnectionStatus])
 
-            if (DevProps):
+            if DevProps:
                 leafName += DevProps.DeviceDesc
 
                 # size_t cchDeviceDesc = 0
@@ -1439,7 +1444,6 @@ def EnumerateHubPorts (
                 #     DevProps.DeviceDesc,
                 #     cchDeviceDesc )
 
-
             # if (connectionInfoEx.ConnectionStatus == NoDeviceConnected):
             #     if (connectionInfoExV2 != NULL &&
             #         connectionInfoExV2.SupportedUsbProtocols.Usb300 == 1):
@@ -1448,7 +1452,6 @@ def EnumerateHubPorts (
             #     else:
             #         icon = NoDeviceIcon
 
-
             # else if (connectionInfoEx.CurrentConfigurationValue):
             #     if (connectionInfoEx.Speed == UsbSuperSpeed):
             #         icon = GoodSsDeviceIcon
@@ -1456,10 +1459,8 @@ def EnumerateHubPorts (
             #     else:
             #         icon = GoodDeviceIcon
 
-
             # else:
             #     icon = BadDeviceIcon
-
 
             if info.UsbDeviceProperties and info.UsbDeviceProperties.DeviceId:
                 UsbipdInstanceId = info.UsbDeviceProperties.DeviceId
@@ -1468,7 +1469,9 @@ def EnumerateHubPorts (
                     info.Manufacturer = info.Strings.get(DeviceDesc.iManufacturer, "")
                     info.Product = info.Strings.get(DeviceDesc.iProduct, "")
                     if DeviceDesc.iSerialNumber:
-                        info.SerialNumber = info.Strings.get(DeviceDesc.iSerialNumber, "")
+                        info.SerialNumber = info.Strings.get(
+                            DeviceDesc.iSerialNumber, ""
+                        )
 
                     # When device is not attached this matches the usbipd InstanceID
                     # Once attached however the VID/PID elements change to relate to the
@@ -1486,25 +1489,20 @@ def EnumerateHubPorts (
             #                 leafName,
             #                 icon)
 
- # for
+
+# for
 
 
-def GetConfigDescriptor (
-    hHubDevice: HANDLE,
-    ConnectionIndex: int,
-    DescriptorIndex: int
-):
+def GetConfigDescriptor(hHubDevice: HANDLE, ConnectionIndex: int, DescriptorIndex: int):
     success = False
     nBytes = 0
     nBytesReturned = DWORD(0)
 
     # configDescReqBuf = UCHAR * (sizeof(USB_DESCRIPTOR_REQUEST) +
     #                          sizeof(USB_CONFIGURATION_DESCRIPTOR))
-    nBytes = (sizeof(USB_DESCRIPTOR_REQUEST) - 1 +
-                                sizeof(USB_CONFIGURATION_DESCRIPTOR))
+    nBytes = sizeof(USB_DESCRIPTOR_REQUEST) - 1 + sizeof(USB_CONFIGURATION_DESCRIPTOR)
 
     configDescReq = USB_DESCRIPTOR_REQUEST()
-
 
     # Request the Configuration Descriptor the first time using our
     # local buffer, which is just big enough for the Cofiguration
@@ -1512,12 +1510,13 @@ def GetConfigDescriptor (
     #
     resize(configDescReq, nBytes)
 
-
     # configDescReq = (USB_DESCRIPTOR_REQUEST)configDescReqBuf
     # configDesc = (USB_CONFIGURATION_DESCRIPTOR)(configDescReq+1)
 
     offset = sizeof(USB_DESCRIPTOR_REQUEST) - 1
-    configDesc = cast(byref(configDescReq, offset), PUSB_CONFIGURATION_DESCRIPTOR).contents
+    configDesc = cast(
+        byref(configDescReq, offset), PUSB_CONFIGURATION_DESCRIPTOR
+    ).contents
 
     # Zero fill the entire request structure
     #
@@ -1540,35 +1539,38 @@ def GetConfigDescriptor (
     #     wIndex    = Zero (or Language ID for String Descriptors)
     #     wLength   = Length of descriptor buffer
     #
-    configDescReq.SetupPacket.wValue = (USB_CONFIGURATION_DESCRIPTOR_TYPE << 8) | DescriptorIndex
+    configDescReq.SetupPacket.wValue = (
+        USB_CONFIGURATION_DESCRIPTOR_TYPE << 8
+    ) | DescriptorIndex
 
-    configDescReq.SetupPacket.wLength = (USHORT)(nBytes - sizeof(USB_DESCRIPTOR_REQUEST) + 1)
+    configDescReq.SetupPacket.wLength = (USHORT)(
+        nBytes - sizeof(USB_DESCRIPTOR_REQUEST) + 1
+    )
 
     # Now issue the get descriptor request.
     #
-    success = DeviceIoControl(hHubDevice,
-                              IOCTL_USB_GET_DESCRIPTOR_FROM_NODE_CONNECTION,
-                              byref(configDescReq),
-                              nBytes,
-                              byref(configDescReq),
-                              nBytes,
-                              byref(nBytesReturned),
-                              NULL)
+    success = DeviceIoControl(
+        hHubDevice,
+        IOCTL_USB_GET_DESCRIPTOR_FROM_NODE_CONNECTION,
+        byref(configDescReq),
+        nBytes,
+        byref(configDescReq),
+        nBytes,
+        byref(nBytesReturned),
+        NULL,
+    )
 
     if not success:
         raise Exception("OOPS")
         return NULL
 
-
-    if (nBytes != nBytesReturned.value):
+    if nBytes != nBytesReturned.value:
         raise Exception("OOPS")
         return NULL
 
-
-    if (configDesc.wTotalLength < sizeof(USB_CONFIGURATION_DESCRIPTOR)):
+    if configDesc.wTotalLength < sizeof(USB_CONFIGURATION_DESCRIPTOR):
         raise Exception("OOPS")
         return NULL
-
 
     # Now request the entire Configuration Descriptor using a dynamically
     # allocated buffer which is sized big enough to hold the entire descriptor
@@ -1578,7 +1580,7 @@ def GetConfigDescriptor (
     buffer = ctypes.create_string_buffer(b"", nBytes)
     configDescReq = cast(byref(buffer), PUSB_DESCRIPTOR_REQUEST).contents
 
-    if (not configDescReq):
+    if not configDescReq:
         raise Exception("OOPS")
         return NULL
 
@@ -1601,47 +1603,47 @@ def GetConfigDescriptor (
     #     wIndex    = Zero (or Language ID for String Descriptors)
     #     wLength   = Length of descriptor buffer
     #
-    configDescReq.SetupPacket.wValue = (USB_CONFIGURATION_DESCRIPTOR_TYPE << 8) | DescriptorIndex
+    configDescReq.SetupPacket.wValue = (
+        USB_CONFIGURATION_DESCRIPTOR_TYPE << 8
+    ) | DescriptorIndex
 
-    configDescReq.SetupPacket.wLength = (USHORT)(nBytes - sizeof(USB_DESCRIPTOR_REQUEST) + 1)
+    configDescReq.SetupPacket.wLength = (USHORT)(
+        nBytes - sizeof(USB_DESCRIPTOR_REQUEST) + 1
+    )
 
     # Now issue the get descriptor request.
     #
 
-    success = DeviceIoControl(hHubDevice,
-                              IOCTL_USB_GET_DESCRIPTOR_FROM_NODE_CONNECTION,
-                              byref(configDescReq),
-                              nBytes,
-                              byref(configDescReq),
-                              nBytes,
-                              byref(nBytesReturned),
-                              NULL)
+    success = DeviceIoControl(
+        hHubDevice,
+        IOCTL_USB_GET_DESCRIPTOR_FROM_NODE_CONNECTION,
+        byref(configDescReq),
+        nBytes,
+        byref(configDescReq),
+        nBytes,
+        byref(nBytesReturned),
+        NULL,
+    )
 
     if not success:
         raise Exception("OOPS")
         FREE(configDescReq)
         return NULL
 
-
-    if (nBytes != nBytesReturned.value):
+    if nBytes != nBytesReturned.value:
         raise Exception("OOPS")
         FREE(configDescReq)
         return NULL
 
-
-    if (configDesc.wTotalLength != (nBytes - sizeof(USB_DESCRIPTOR_REQUEST) + 1)):
+    if configDesc.wTotalLength != (nBytes - sizeof(USB_DESCRIPTOR_REQUEST) + 1):
         raise Exception("OOPS")
         FREE(configDescReq)
         return NULL
-
 
     return buffer
 
 
-def AreThereStringDescriptors (
-    DeviceDesc: USB_DEVICE_DESCRIPTOR,
-    allDesc
-):
+def AreThereStringDescriptors(DeviceDesc: USB_DEVICE_DESCRIPTOR, allDesc):
     # descEnd = NULL
     # configDesc = cast(byref(commonDesc), PUSB_CONFIGURATION_DESCRIPTOR).contents
 
@@ -1649,10 +1651,7 @@ def AreThereStringDescriptors (
     # Check Device Descriptor strings
     #
 
-    if (DeviceDesc.iManufacturer or
-        DeviceDesc.iProduct      or
-        DeviceDesc.iSerialNumber
-       ):
+    if DeviceDesc.iManufacturer or DeviceDesc.iProduct or DeviceDesc.iSerialNumber:
         return True
 
     #
@@ -1665,68 +1664,71 @@ def AreThereStringDescriptors (
     offset = 0
     commonDesc = cast(byref(allDesc), PUSB_COMMON_DESCRIPTOR).contents
 
-    while (offset + sizeof(USB_COMMON_DESCRIPTOR) < descEnd and
-           offset + commonDesc.bLength <= descEnd):
+    while (
+        offset + sizeof(USB_COMMON_DESCRIPTOR) < descEnd
+        and offset + commonDesc.bLength <= descEnd
+    ):
 
         if commonDesc.bDescriptorType in (
-            USB_CONFIGURATION_DESCRIPTOR_TYPE, USB_OTHER_SPEED_CONFIGURATION_DESCRIPTOR_TYPE
+            USB_CONFIGURATION_DESCRIPTOR_TYPE,
+            USB_OTHER_SPEED_CONFIGURATION_DESCRIPTOR_TYPE,
         ):
-                if (commonDesc.bLength != sizeof(USB_CONFIGURATION_DESCRIPTOR)):
-                    raise Exception("OOPS")
-                    break
+            if commonDesc.bLength != sizeof(USB_CONFIGURATION_DESCRIPTOR):
+                raise Exception("OOPS")
+                break
 
-                configDesc = cast(byref(commonDesc), PUSB_CONFIGURATION_DESCRIPTOR).contents
-                if (configDesc.iConfiguration):
-                    return True
+            configDesc = cast(byref(commonDesc), PUSB_CONFIGURATION_DESCRIPTOR).contents
+            if configDesc.iConfiguration:
+                return True
 
-
-                # commonDesc = (USB_COMMON_DESCRIPTOR) ((PUCHAR) commonDesc + commonDesc.bLength)
-                offset += commonDesc.bLength
-                commonDesc = cast(byref(allDesc, offset), PUSB_COMMON_DESCRIPTOR).contents
-                continue
+            # commonDesc = (USB_COMMON_DESCRIPTOR) ((PUCHAR) commonDesc + commonDesc.bLength)
+            offset += commonDesc.bLength
+            commonDesc = cast(byref(allDesc, offset), PUSB_COMMON_DESCRIPTOR).contents
+            continue
 
         elif commonDesc.bDescriptorType == USB_INTERFACE_DESCRIPTOR_TYPE:
-                if (commonDesc.bLength != sizeof(USB_INTERFACE_DESCRIPTOR) and
-                    commonDesc.bLength != sizeof(USB_INTERFACE_DESCRIPTOR2)):
-                    raise Exception("OOPS")
-                    break
+            if commonDesc.bLength != sizeof(
+                USB_INTERFACE_DESCRIPTOR
+            ) and commonDesc.bLength != sizeof(USB_INTERFACE_DESCRIPTOR2):
+                raise Exception("OOPS")
+                break
 
-                configDesc = cast(byref(commonDesc), PUSB_INTERFACE_DESCRIPTOR).contents
-                if configDesc.iInterface:
-                    return True
+            configDesc = cast(byref(commonDesc), PUSB_INTERFACE_DESCRIPTOR).contents
+            if configDesc.iInterface:
+                return True
 
-                # commonDesc = (USB_COMMON_DESCRIPTOR) ((PUCHAR) commonDesc + commonDesc.bLength)
-                offset += commonDesc.bLength
-                commonDesc = cast(byref(allDesc, offset), PUSB_COMMON_DESCRIPTOR).contents
+            # commonDesc = (USB_COMMON_DESCRIPTOR) ((PUCHAR) commonDesc + commonDesc.bLength)
+            offset += commonDesc.bLength
+            commonDesc = cast(byref(allDesc, offset), PUSB_COMMON_DESCRIPTOR).contents
 
-                continue
+            continue
 
         else:
-                # commonDesc = (USB_COMMON_DESCRIPTOR) ((PUCHAR) commonDesc + commonDesc.bLength)
-                offset += commonDesc.bLength
-                commonDesc = cast(byref(allDesc, offset), PUSB_COMMON_DESCRIPTOR).contents
-                continue
+            # commonDesc = (USB_COMMON_DESCRIPTOR) ((PUCHAR) commonDesc + commonDesc.bLength)
+            offset += commonDesc.bLength
+            commonDesc = cast(byref(allDesc, offset), PUSB_COMMON_DESCRIPTOR).contents
+            continue
         break
 
     return False
 
 
-def GetAllStringDescriptors (
+def GetAllStringDescriptors(
     hHubDevice: HANDLE,
     ConnectionIndex: int,
     DeviceDesc: USB_DEVICE_DESCRIPTOR,
-    configDesc
+    configDesc,
 ) -> Tuple[List[STRING_DESCRIPTOR_NODE], dict]:
 
     stringDescs: List[STRING_DESCRIPTOR_NODE] = []
     Strings = {}
-    numLanguageIDs = ULONG() # = 0
-    languageIDs = USHORT() # = NULL
+    numLanguageIDs = ULONG()  # = 0
+    languageIDs = USHORT()  # = NULL
 
-    descEnd = None # = NULL
-    commonDesc = USB_COMMON_DESCRIPTOR() # = NULL
-    uIndex = UCHAR(1) # = 1
-    bInterfaceClass = UCHAR() # = 0
+    descEnd = None  # = NULL
+    commonDesc = USB_COMMON_DESCRIPTOR()  # = NULL
+    uIndex = UCHAR(1)  # = 1
+    bInterfaceClass = UCHAR()  # = 0
     getMoreStrings = False
     hr = S_OK
 
@@ -1734,17 +1736,12 @@ def GetAllStringDescriptors (
     # Get the array of supported Language IDs, which is returned
     # in String Descriptor 0
     #
-    supportedLanguagesString = GetStringDescriptor(hHubDevice,
-                                                   ConnectionIndex,
-                                                   0,
-                                                   0)
+    supportedLanguagesString = GetStringDescriptor(hHubDevice, ConnectionIndex, 0, 0)
 
-    if (not supportedLanguagesString):
-        return NULL
-
+    if not supportedLanguagesString:
+        raise AttributeError("Couldn't read languages string - possibly in sleep state")
 
     stringDescs.append(supportedLanguagesString)
-
 
     numLanguageIDs = (supportedLanguagesString.StringDescriptor.bLength - 2) // 2
 
@@ -1754,32 +1751,41 @@ def GetAllStringDescriptors (
     # Get the Device Descriptor strings
     #
 
-    if (DeviceDesc.iManufacturer):
-        Strings.update(GetStringDescriptors(hHubDevice,
-                             ConnectionIndex,
-                             DeviceDesc.iManufacturer,
-                             numLanguageIDs,
-                             languageIDs,
-                             stringDescs))
+    if DeviceDesc.iManufacturer:
+        Strings.update(
+            GetStringDescriptors(
+                hHubDevice,
+                ConnectionIndex,
+                DeviceDesc.iManufacturer,
+                numLanguageIDs,
+                languageIDs,
+                stringDescs,
+            )
+        )
 
+    if DeviceDesc.iProduct:
+        Strings.update(
+            GetStringDescriptors(
+                hHubDevice,
+                ConnectionIndex,
+                DeviceDesc.iProduct,
+                numLanguageIDs,
+                languageIDs,
+                stringDescs,
+            )
+        )
 
-    if (DeviceDesc.iProduct):
-        Strings.update(GetStringDescriptors(hHubDevice,
-                             ConnectionIndex,
-                             DeviceDesc.iProduct,
-                             numLanguageIDs,
-                             languageIDs,
-                             stringDescs))
-
-
-    if (DeviceDesc.iSerialNumber):
-        Strings.update(GetStringDescriptors(hHubDevice,
-                             ConnectionIndex,
-                             DeviceDesc.iSerialNumber,
-                             numLanguageIDs,
-                             languageIDs,
-                             stringDescs))
-
+    if DeviceDesc.iSerialNumber:
+        Strings.update(
+            GetStringDescriptors(
+                hHubDevice,
+                ConnectionIndex,
+                DeviceDesc.iSerialNumber,
+                numLanguageIDs,
+                languageIDs,
+                stringDescs,
+            )
+        )
 
     #
     # Get the Configuration and Interface Descriptor strings
@@ -1793,83 +1799,98 @@ def GetAllStringDescriptors (
 
     # while ((PUCHAR)commonDesc + sizeof(USB_COMMON_DESCRIPTOR) < descEnd &&
     #        (PUCHAR)commonDesc + commonDesc.bLength <= descEnd):
-    while (offset + sizeof(USB_COMMON_DESCRIPTOR) < descEnd and
-           offset + commonDesc.bLength <= descEnd):
+    while (
+        offset + sizeof(USB_COMMON_DESCRIPTOR) < descEnd
+        and offset + commonDesc.bLength <= descEnd
+    ):
 
         if commonDesc.bDescriptorType == USB_CONFIGURATION_DESCRIPTOR_TYPE:
-            if (commonDesc.bLength != sizeof(USB_CONFIGURATION_DESCRIPTOR)):
+            if commonDesc.bLength != sizeof(USB_CONFIGURATION_DESCRIPTOR):
                 raise Exception("OOPS")
                 break
 
             confDesc = cast(byref(commonDesc), PUSB_CONFIGURATION_DESCRIPTOR).contents
-            if (confDesc.iConfiguration):
-                GetStringDescriptors(hHubDevice,
-                                        ConnectionIndex,
-                                        confDesc.iConfiguration,
-                                        numLanguageIDs,
-                                        languageIDs,
-                                        stringDescs)
+            if confDesc.iConfiguration:
+                GetStringDescriptors(
+                    hHubDevice,
+                    ConnectionIndex,
+                    confDesc.iConfiguration,
+                    numLanguageIDs,
+                    languageIDs,
+                    stringDescs,
+                )
 
             offset += commonDesc.bLength
-            commonDesc = cast(byref(configDesc, offset), PUSB_COMMON_DESCRIPTOR).contents
+            commonDesc = cast(
+                byref(configDesc, offset), PUSB_COMMON_DESCRIPTOR
+            ).contents
 
             continue
 
         elif commonDesc.bDescriptorType == USB_IAD_DESCRIPTOR_TYPE:
-            if (commonDesc.bLength < sizeof(USB_IAD_DESCRIPTOR)):
+            if commonDesc.bLength < sizeof(USB_IAD_DESCRIPTOR):
                 raise Exception("OOPS")
                 break
 
             iadDesc = cast(byref(commonDesc), POINTER(USB_IAD_DESCRIPTOR)).contents
             if iadDesc.iFunction:
-                GetStringDescriptors(hHubDevice,
-                                        ConnectionIndex,
-                                        iadDesc.iFunction,
-                                        numLanguageIDs,
-                                        languageIDs,
-                                        stringDescs)
+                GetStringDescriptors(
+                    hHubDevice,
+                    ConnectionIndex,
+                    iadDesc.iFunction,
+                    numLanguageIDs,
+                    languageIDs,
+                    stringDescs,
+                )
 
             offset += commonDesc.bLength
-            commonDesc = cast(byref(configDesc, offset), PUSB_COMMON_DESCRIPTOR).contents
+            commonDesc = cast(
+                byref(configDesc, offset), PUSB_COMMON_DESCRIPTOR
+            ).contents
             continue
 
         elif commonDesc.bDescriptorType == USB_INTERFACE_DESCRIPTOR_TYPE:
-            if (commonDesc.bLength != sizeof(USB_INTERFACE_DESCRIPTOR) and
-                commonDesc.bLength != sizeof(USB_INTERFACE_DESCRIPTOR2)):
+            if commonDesc.bLength != sizeof(
+                USB_INTERFACE_DESCRIPTOR
+            ) and commonDesc.bLength != sizeof(USB_INTERFACE_DESCRIPTOR2):
                 raise Exception("OOPS")
                 break
 
             intDesc = cast(byref(commonDesc), PUSB_INTERFACE_DESCRIPTOR).contents
             if intDesc.iInterface:
-                GetStringDescriptors(hHubDevice,
-                                        ConnectionIndex,
-                                        intDesc.iInterface,
-                                        numLanguageIDs,
-                                        languageIDs,
-                                        stringDescs)
-
+                GetStringDescriptors(
+                    hHubDevice,
+                    ConnectionIndex,
+                    intDesc.iInterface,
+                    numLanguageIDs,
+                    languageIDs,
+                    stringDescs,
+                )
 
             #
             # We need to display more string descriptors for the following
             # interface classes
             #
             bInterfaceClass = intDesc.bInterfaceClass
-            if (bInterfaceClass == USB_DEVICE_CLASS_VIDEO):
+            if bInterfaceClass == USB_DEVICE_CLASS_VIDEO:
                 getMoreStrings = True
 
             offset += commonDesc.bLength
-            commonDesc = cast(byref(configDesc, offset), PUSB_COMMON_DESCRIPTOR).contents
+            commonDesc = cast(
+                byref(configDesc, offset), PUSB_COMMON_DESCRIPTOR
+            ).contents
             # commonDesc = (USB_COMMON_DESCRIPTOR) ((PUCHAR) commonDesc + commonDesc.bLength)
             continue
 
         else:
             offset += commonDesc.bLength
-            commonDesc = cast(byref(configDesc, offset), PUSB_COMMON_DESCRIPTOR).contents
+            commonDesc = cast(
+                byref(configDesc, offset), PUSB_COMMON_DESCRIPTOR
+            ).contents
             # commonDesc = (USB_COMMON_DESCRIPTOR) ((PUCHAR) commonDesc + commonDesc.bLength)
             continue
 
         break
-
 
     # if (getMoreStrings):
     #     #
@@ -1891,13 +1912,10 @@ def GetAllStringDescriptors (
     #                                   languageIDs,
     #                                   supportedLanguagesString)
 
-
-
     return stringDescs, Strings
 
 
-
-#*****************************************************************************
+# *****************************************************************************
 #
 # GetStringDescriptor()
 #
@@ -1911,24 +1929,21 @@ def GetAllStringDescriptors (
 #
 # LanguageID - Language in which the string should be requested.
 #
-#*****************************************************************************
+# *****************************************************************************
 
-def GetStringDescriptor (
-    hHubDevice: HANDLE,
-    ConnectionIndex: int,
-    DescriptorIndex: int,
-    LanguageID: int
+
+def GetStringDescriptor(
+    hHubDevice: HANDLE, ConnectionIndex: int, DescriptorIndex: int, LanguageID: int
 ) -> STRING_DESCRIPTOR_NODE:
     success = 0
     nBytes = 0
     nBytesReturned = DWORD(0)
 
     stringDescReqBuf = ctypes.create_string_buffer(
-        b"",
-        sizeof(USB_DESCRIPTOR_REQUEST) - 1 + MAXIMUM_USB_STRING_LENGTH
+        b"", sizeof(USB_DESCRIPTOR_REQUEST) - 1 + MAXIMUM_USB_STRING_LENGTH
     )
     # UCHAR   stringDescReqBuf[sizeof(USB_DESCRIPTOR_REQUEST) +
-                            #  MAXIMUM_USB_STRING_LENGTH]
+    #  MAXIMUM_USB_STRING_LENGTH]
 
     stringDescReq = USB_DESCRIPTOR_REQUEST()
     stringDesc = USB_STRING_DESCRIPTOR()
@@ -1936,12 +1951,10 @@ def GetStringDescriptor (
 
     nBytes = sizeof(stringDescReqBuf)
 
-
     # stringDescReq = (USB_DESCRIPTOR_REQUEST)stringDescReqBuf
     # stringDesc = (USB_STRING_DESCRIPTOR)(stringDescReq+1)
     stringDescReq = cast(byref(stringDescReqBuf), PUSB_DESCRIPTOR_REQUEST).contents
     stringDesc = cast(byref(stringDescReq.Data), PUSB_STRING_DESCRIPTOR).contents
-
 
     # Zero fill the entire request structure
     #
@@ -1964,22 +1977,26 @@ def GetStringDescriptor (
     #     wIndex    = Zero (or Language ID for String Descriptors)
     #     wLength   = Length of descriptor buffer
     #
-    stringDescReq.SetupPacket.wValue = (USB_STRING_DESCRIPTOR_TYPE << 8) | DescriptorIndex
+    stringDescReq.SetupPacket.wValue = (
+        USB_STRING_DESCRIPTOR_TYPE << 8
+    ) | DescriptorIndex
 
     stringDescReq.SetupPacket.wIndex = LanguageID
 
-    stringDescReq.SetupPacket.wLength = (nBytes - sizeof(USB_DESCRIPTOR_REQUEST) + 1)
+    stringDescReq.SetupPacket.wLength = nBytes - sizeof(USB_DESCRIPTOR_REQUEST) + 1
 
     # Now issue the get descriptor request.
     #
-    success = DeviceIoControl(hHubDevice,
-                              IOCTL_USB_GET_DESCRIPTOR_FROM_NODE_CONNECTION,
-                              byref(stringDescReq),
-                              nBytes,
-                              byref(stringDescReq),
-                              nBytes,
-                              byref(nBytesReturned),
-                              NULL)
+    success = DeviceIoControl(
+        hHubDevice,
+        IOCTL_USB_GET_DESCRIPTOR_FROM_NODE_CONNECTION,
+        byref(stringDescReq),
+        nBytes,
+        byref(stringDescReq),
+        nBytes,
+        byref(nBytesReturned),
+        NULL,
+    )
 
     #
     # Do some sanity checks on the return from the get descriptor request.
@@ -1988,28 +2005,30 @@ def GetStringDescriptor (
     if not success:
         error = GetLastError()
         if DEBUG:
-            print(WinError(get_last_error()))
-        return stringDescNode
+            log.error(WinError(error))
+        if error == 31:
+            # PermissionError(13, 'A device attached to the system is not functioning.', None, 31)
+            # Device likely in sleep state: https://stackoverflow.com/a/60017122
+            raise AttributeError(
+                "Couldn't read descriptor - device likely in sleep state"
+            )
+        return None
 
-    if (nBytesReturned.value < 2):
+    if nBytesReturned.value < 2:
         raise Exception("OOPS")
         return NULL
 
-
-    if (stringDesc.bDescriptorType != USB_STRING_DESCRIPTOR_TYPE):
+    if stringDesc.bDescriptorType != USB_STRING_DESCRIPTOR_TYPE:
         raise Exception("OOPS")
         return NULL
 
-
-    if (stringDesc.bLength != nBytesReturned.value - sizeof(USB_DESCRIPTOR_REQUEST) + 1):
+    if stringDesc.bLength != nBytesReturned.value - sizeof(USB_DESCRIPTOR_REQUEST) + 1:
         raise Exception("OOPS")
         return NULL
 
-
-    if (stringDesc.bLength % 2 != 0):
+    if stringDesc.bLength % 2 != 0:
         raise Exception("OOPS")
         return NULL
-
 
     #
     # Looks good, allocate some (zero filled) space for the string descriptor
@@ -2017,14 +2036,13 @@ def GetStringDescriptor (
     #
 
     # stringDescNode = (PSTRING_DESCRIPTOR_NODE)ALLOC(sizeof(STRING_DESCRIPTOR_NODE) +
-                                                    # stringDesc.bLength)
+    # stringDesc.bLength)
     stringDescNode = STRING_DESCRIPTOR_NODE()
     # resize(stringDescNode, sizeof(STRING_DESCRIPTOR_NODE) + stringDesc.bLength)
 
-    if (stringDescNode == NULL):
+    if stringDescNode == NULL:
         raise Exception("OOPS")
         return NULL
-
 
     stringDescNode.DescriptorIndex = DescriptorIndex
     stringDescNode.LanguageID = LanguageID
@@ -2037,7 +2055,7 @@ def GetStringDescriptor (
     resize(stringDescS, stringDescLen)
 
     desc_offset = USB_DESCRIPTOR_REQUEST.Data.offset
-    raw = stringDescReqBuf[desc_offset: desc_offset + stringDescLen]
+    raw = stringDescReqBuf[desc_offset : desc_offset + stringDescLen]
     cast(byref(stringDescS), POINTER(c_char * stringDescLen)).contents[:] = raw
 
     stringDescNode.StringDescriptor = stringDescS
@@ -2045,7 +2063,7 @@ def GetStringDescriptor (
     return stringDescNode
 
 
-#*****************************************************************************
+# *****************************************************************************
 #
 # GetStringDescriptors()
 #
@@ -2066,16 +2084,16 @@ def GetStringDescriptor (
 #
 # Return Value: HRESULT indicating whether the string is on the list
 #
-#*****************************************************************************
+# *****************************************************************************
 
 
-def GetStringDescriptors (
+def GetStringDescriptors(
     hHubDevice: HANDLE,
     ConnectionIndex: int,
     DescriptorIndex: int,
     NumLanguageIDs: int,
     LanguageIDs: List[int],
-    StringDescList: List[STRING_DESCRIPTOR_NODE]
+    StringDescList: List[STRING_DESCRIPTOR_NODE],
 ) -> dict:
 
     # tail = StringDescList
@@ -2087,13 +2105,12 @@ def GetStringDescriptors (
     # see if we've already retrieved it
     #
     for node in StringDescList:
-    # for (tail = StringDescNodeHead; tail != NULL; tail = tail.Next):
-        if (node.DescriptorIndex == DescriptorIndex):
+        # for (tail = StringDescNodeHead; tail != NULL; tail = tail.Next):
+        if node.DescriptorIndex == DescriptorIndex:
             return {node.DescriptorIndex: str(node.StringDescriptor)}
 
         # trailing = tail
         # tail = tail.Next
-
 
     # tail = trailing
 
@@ -2105,32 +2122,27 @@ def GetStringDescriptors (
 
     if NumLanguageIDs > 1:
         if DEBUG:
-            print("Multiple language strings not fully supported")
+            log.debug("Multiple language strings not fully supported")
 
     found = {}
     for i in range(NumLanguageIDs):
         # if not tail:
         #     break
-        node = GetStringDescriptor(hHubDevice,
-                                         ConnectionIndex,
-                                         DescriptorIndex,
-                                         LanguageIDs[i])
+        node = GetStringDescriptor(
+            hHubDevice, ConnectionIndex, DescriptorIndex, LanguageIDs[i]
+        )
 
         StringDescList.append(node)
         if node.DescriptorIndex not in found:
             found[node.DescriptorIndex] = str(node.StringDescriptor)
 
-
     # if (tail == NULL):
-        # return E_FAIL
+    # return E_FAIL
     # else:
     return found
 
 
-def GetDriverKeyName(
-    Hub: HANDLE,
-    ConnectionIndex: int
-):
+def GetDriverKeyName(Hub: HANDLE, ConnectionIndex: int):
     success = False
     nBytes = ULONG(0)
     driverKeyName = USB_NODE_CONNECTION_DRIVERKEY_NAME()
@@ -2143,32 +2155,34 @@ def GetDriverKeyName(
     #
     driverKeyName.ConnectionIndex = ConnectionIndex
 
-    success = DeviceIoControl(Hub,
-                              IOCTL_USB_GET_NODE_CONNECTION_DRIVERKEY_NAME,
-                              byref(driverKeyName),
-                              sizeof(driverKeyName),
-                              byref(driverKeyName),
-                              sizeof(driverKeyName),
-                              byref(nBytes),
-                              NULL)
+    success = DeviceIoControl(
+        Hub,
+        IOCTL_USB_GET_NODE_CONNECTION_DRIVERKEY_NAME,
+        byref(driverKeyName),
+        sizeof(driverKeyName),
+        byref(driverKeyName),
+        sizeof(driverKeyName),
+        byref(nBytes),
+        NULL,
+    )
 
-    if (not success):
+    if not success:
         error = GetLastError()
-        raise WinError(get_last_error())
+        raise WinError(error)
         # goto GetDriverKeyNameError;
 
     # Allocate space to hold the driver key name
     #
     nBytes = ULONG(driverKeyName.ActualLength)
 
-    if (nBytes.value <= sizeof(driverKeyName)):
+    if nBytes.value <= sizeof(driverKeyName):
         error = GetLastError()
         raise Exception(f"OOPS: {error}")
         # goto GetDriverKeyNameError;
 
     # driverKeyNameW = ALLOC(nBytes);
     resize(driverKeyNameW, nBytes.value)
-    if (not driverKeyNameW):
+    if not driverKeyNameW:
         error = GetLastError()
         raise Exception(f"OOPS: {error}")
         # goto GetDriverKeyNameError;
@@ -2178,16 +2192,18 @@ def GetDriverKeyName(
     #
     driverKeyNameW.ConnectionIndex = ConnectionIndex
 
-    success = DeviceIoControl(Hub,
-                              IOCTL_USB_GET_NODE_CONNECTION_DRIVERKEY_NAME,
-                              byref(driverKeyNameW),
-                              nBytes,
-                              byref(driverKeyNameW),
-                              nBytes,
-                              byref(nBytes),
-                              NULL)
+    success = DeviceIoControl(
+        Hub,
+        IOCTL_USB_GET_NODE_CONNECTION_DRIVERKEY_NAME,
+        byref(driverKeyNameW),
+        nBytes,
+        byref(driverKeyNameW),
+        nBytes,
+        byref(nBytes),
+        NULL,
+    )
 
-    if (not success):
+    if not success:
         error = GetLastError()
         raise WinError(get_last_error())
         # goto GetDriverKeyNameError;
@@ -2215,9 +2231,7 @@ def GetDriverKeyName(
 #     return NULL
 
 
-def GetHCDDriverKeyName (
-     HCD: HANDLE
-):
+def GetHCDDriverKeyName(HCD: HANDLE):
     nBytes = ULONG(0)
     driverKeyName = USB_HCD_DRIVERKEY_NAME()
     driverKeyNameW = USB_HCD_DRIVERKEY_NAME()
@@ -2226,57 +2240,57 @@ def GetHCDDriverKeyName (
 
     # Get the length of the name of the driver key of the HCD
     #
-    success = DeviceIoControl(HCD,
-                              IOCTL_GET_HCD_DRIVERKEY_NAME,
-                              byref(driverKeyName),
-                              sizeof(driverKeyName),
-                              byref(driverKeyName),
-                              sizeof(driverKeyName),
-                              byref(nBytes),
-                              NULL)
+    success = DeviceIoControl(
+        HCD,
+        IOCTL_GET_HCD_DRIVERKEY_NAME,
+        byref(driverKeyName),
+        sizeof(driverKeyName),
+        byref(driverKeyName),
+        sizeof(driverKeyName),
+        byref(nBytes),
+        NULL,
+    )
 
     error = GetLastError()
-    if (not success):
+    if not success:
         error = GetLastError()
         raise Exception(f"OOPS: {error}")
         # goto GetHCDDriverKeyNameError
-
 
     # Allocate space to hold the driver key name
     #
     nBytes = DWORD(driverKeyName.ActualLength)
-    if (nBytes.value <= sizeof(driverKeyName)):
+    if nBytes.value <= sizeof(driverKeyName):
         error = GetLastError()
         raise Exception(f"OOPS: {error}")
         # goto GetHCDDriverKeyNameError
-
 
     # driverKeyNameW = ALLOC(nBytes)
     # driverKeyNameW = ctypes.create_unicode_buffer(nBytes.value)
     resize(driverKeyNameW, nBytes.value)
-    if (not driverKeyNameW):
+    if not driverKeyNameW:
         error = GetLastError()
         raise Exception(f"OOPS: {error}")
         # goto GetHCDDriverKeyNameError
-
 
     # Get the name of the driver key of the device attached to
     # the specified port.
     #
 
-    success = DeviceIoControl(HCD,
-                              IOCTL_GET_HCD_DRIVERKEY_NAME,
-                              byref(driverKeyNameW),
-                              nBytes,
-                              byref(driverKeyNameW),
-                              nBytes,
-                              byref(nBytes),
-                              NULL)
-    if (not success):
+    success = DeviceIoControl(
+        HCD,
+        IOCTL_GET_HCD_DRIVERKEY_NAME,
+        byref(driverKeyNameW),
+        nBytes,
+        byref(driverKeyNameW),
+        nBytes,
+        byref(nBytes),
+        NULL,
+    )
+    if not success:
         error = GetLastError()
         raise Exception(f"OOPS: {error}")
         # goto GetHCDDriverKeyNameError
-
 
     return str(driverKeyNameW)
     # return driverKeyNameW.DriverKeyName
@@ -2296,10 +2310,7 @@ def GetHCDDriverKeyName (
     # return driverKeyNameA
 
 
-def GetExternalHubName (
-    Hub: HANDLE,
-    ConnectionIndex: int
-):
+def GetExternalHubName(Hub: HANDLE, ConnectionIndex: int):
     nBytes = ULONG(0)
     extHubName = USB_NODE_CONNECTION_NAME()
     # extHubNameW = PUSB_NODE_CONNECTION_NAME() = NULL
@@ -2310,51 +2321,55 @@ def GetExternalHubName (
     #
     extHubName.ConnectionIndex = ConnectionIndex
 
-    success = DeviceIoControl(Hub,
-                              IOCTL_USB_GET_NODE_CONNECTION_NAME,
-                              byref(extHubName),
-                              sizeof(extHubName),
-                              byref(extHubName),
-                              sizeof(extHubName),
-                              byref(nBytes),
-                              NULL)
+    success = DeviceIoControl(
+        Hub,
+        IOCTL_USB_GET_NODE_CONNECTION_NAME,
+        byref(extHubName),
+        sizeof(extHubName),
+        byref(extHubName),
+        sizeof(extHubName),
+        byref(nBytes),
+        NULL,
+    )
 
-    if (not success):
+    if not success:
         error = GetLastError()
         if DEBUG:
-            print(WinError(get_last_error()))
+            log.error(WinError(get_last_error()))
         raise Exception("OOPS")
 
     # Allocate space to hold the external hub name
     #
     nBytes = DWORD(extHubName.ActualLength)
 
-    if (nBytes.value <= sizeof(extHubName)):
+    if nBytes.value <= sizeof(extHubName):
         raise Exception("OOPS")
 
     # extHubNameW = ALLOC(nBytes)
     resize(extHubName, nBytes.value)
 
-    if (not extHubName):
+    if not extHubName:
         raise Exception("OOPS")
 
     # Get the name of the external hub attached to the specified port
     #
     extHubName.ConnectionIndex = ConnectionIndex
 
-    success = DeviceIoControl(Hub,
-                              IOCTL_USB_GET_NODE_CONNECTION_NAME,
-                              byref(extHubName),
-                              nBytes,
-                              byref(extHubName),
-                              nBytes,
-                              byref(nBytes),
-                              NULL)
+    success = DeviceIoControl(
+        Hub,
+        IOCTL_USB_GET_NODE_CONNECTION_NAME,
+        byref(extHubName),
+        nBytes,
+        byref(extHubName),
+        nBytes,
+        byref(nBytes),
+        NULL,
+    )
 
-    if (not success):
+    if not success:
         error = GetLastError()
         if DEBUG:
-            print(WinError(get_last_error()))
+            log.error(WinError(get_last_error()))
         raise Exception("OOPS")
 
     # Convert the External Hub name
@@ -2374,7 +2389,7 @@ def DriverNameToDeviceInst(
     cbDriverName: int,
     # pDevInfo: POINTER(HDEVINFO),
     # pDevInfoData: PSP_DEVINFO_DATA
-    ):
+):
 
     deviceInfo: HDEVINFO = INVALID_HANDLE_VALUE
     status: BOOL = True
@@ -2401,7 +2416,7 @@ def DriverNameToDeviceInst(
     # if (NULL == pDriverName):
     #     status = FALSE
     #     error = GetLastError()
-    #     print(WinError(get_last_error()))
+    #     log.error(WinError(get_last_error()))
     # StringCbCopyN(pDriverName, cbDriverName + 1, DriverName, cbDriverName)
 
     #
@@ -2413,32 +2428,27 @@ def DriverNameToDeviceInst(
 
     # Examine all present devices to see if any match the given DriverName
     #
-    deviceInfo = SetupDiGetClassDevs(NULL,
-            NULL,
-            NULL,
-            DIGCF_ALLCLASSES | DIGCF_PRESENT)
+    deviceInfo = SetupDiGetClassDevs(NULL, NULL, NULL, DIGCF_ALLCLASSES | DIGCF_PRESENT)
 
-    if (deviceInfo == INVALID_HANDLE_VALUE):
+    if deviceInfo == INVALID_HANDLE_VALUE:
         status = False
         error = GetLastError()
         if DEBUG:
-            print(WinError(get_last_error()))
+            log.error(WinError(get_last_error()))
 
     deviceIndex = 0
     deviceInfoData.cbSize = sizeof(deviceInfoData)
 
-    while (not done):
+    while not done:
         #
         # Get devinst of the next device
         #
 
-        status = SetupDiEnumDeviceInfo(deviceInfo,
-                                       deviceIndex,
-                                       byref(deviceInfoData))
+        status = SetupDiEnumDeviceInfo(deviceInfo, deviceIndex, byref(deviceInfoData))
 
         deviceIndex += 1
 
-        if (not status):
+        if not status:
             #
             # This could be an error, or indication that all devices have been
             # processed. Either way the desired device was not found.
@@ -2451,41 +2461,39 @@ def DriverNameToDeviceInst(
         # Get the DriverName value
         #
 
-        bResult, buf = GetDeviceProperty(deviceInfo,
-                                    deviceInfoData,
-                                    SPDRP_DRIVER)
-                                    # byref(buf))
+        bResult, buf = GetDeviceProperty(deviceInfo, deviceInfoData, SPDRP_DRIVER)
+        # byref(buf))
 
         # If the DriverName value matches, return the DeviceInstance
         #
-        if (bResult and buf and DriverName == buf):
+        if bResult and buf and DriverName == buf:
             done = True
             # pDevInfo = deviceInfo
             # CopyMemory(pDevInfoData, &deviceInfoData, sizeof(deviceInfoData))
             # FREE(buf)
             break
 
-        if(buf != NULL):
+        if buf != NULL:
             # FREE(buf)
             buf = NULL
 
-# Done:
+    # Done:
 
-#     if (bResult == FALSE):
-#         if (deviceInfo != INVALID_HANDLE_VALUE):
-#             SetupDiDestroyDeviceInfoList(deviceInfo)
+    #     if (bResult == FALSE):
+    #         if (deviceInfo != INVALID_HANDLE_VALUE):
+    #             SetupDiDestroyDeviceInfoList(deviceInfo)
 
-#     if (pDriverName != NULL):
-#         FREE(pDriverName)
+    #     if (pDriverName != NULL):
+    #         FREE(pDriverName)
 
     return status, deviceInfo, deviceInfoData
 
+
 def FindMatchingDeviceNodeForDriverName(
-    DriverKeyName: str,
-    IsHub: bool
-    ) -> Optional[DEVICE_INFO_NODE]:
-    pNode: PDEVICE_INFO_NODE  = NULL
-    pList: PDEVICE_GUID_LIST  = NULL
+    DriverKeyName: str, IsHub: bool
+) -> Optional[DEVICE_INFO_NODE]:
+    pNode: PDEVICE_INFO_NODE = NULL
+    pList: PDEVICE_GUID_LIST = NULL
     pEntry: PLIST_ENTRY = NULL
 
     pList = gHubList if IsHub else gDeviceList
@@ -2499,11 +2507,9 @@ def FindMatchingDeviceNodeForDriverName(
 
 
 def GetDeviceProperty(
-    DeviceInfoSet: HDEVINFO,
-    DeviceInfoData: SP_DEVINFO_DATA,
-    Property: DWORD
+    DeviceInfoSet: HDEVINFO, DeviceInfoData: SP_DEVINFO_DATA, Property: DWORD
 ):
-# ) - > Tuple[bool, str]:
+    # ) - > Tuple[bool, str]:
 
     bResult = BOOL(0)
     requiredLength = DWORD(0)
@@ -2511,27 +2517,33 @@ def GetDeviceProperty(
 
     ppBuffer = ""
 
-    bResult = SetupDiGetDeviceRegistryProperty(DeviceInfoSet,
-                                               byref(DeviceInfoData),
-                                               Property,
-                                               NULL,
-                                               NULL,
-                                               0,
-                                               byref(requiredLength))
+    bResult = SetupDiGetDeviceRegistryProperty(
+        DeviceInfoSet,
+        byref(DeviceInfoData),
+        Property,
+        NULL,
+        NULL,
+        0,
+        byref(requiredLength),
+    )
     lastError = GetLastError()
 
-    if ((requiredLength.value == 0) or (bResult != FALSE and lastError != ERROR_INSUFFICIENT_BUFFER)):
+    if (requiredLength.value == 0) or (
+        bResult != FALSE and lastError != ERROR_INSUFFICIENT_BUFFER
+    ):
         return False, ppBuffer
 
     ppBuffer = ctypes.create_unicode_buffer(requiredLength.value)
 
-    bResult = SetupDiGetDeviceRegistryProperty(DeviceInfoSet,
-                                               byref(DeviceInfoData),
-                                                Property ,
-                                                NULL,
-                                                byref(ppBuffer),
-                                                requiredLength,
-                                                byref(requiredLength))
+    bResult = SetupDiGetDeviceRegistryProperty(
+        DeviceInfoSet,
+        byref(DeviceInfoData),
+        Property,
+        NULL,
+        byref(ppBuffer),
+        requiredLength,
+        byref(requiredLength),
+    )
     if not bResult:
         ppBuffer = ""
         return False, ppBuffer
@@ -2539,25 +2551,18 @@ def GetDeviceProperty(
     return True, ppBuffer.value
 
 
-def GetInstanceId(
-        deviceInfo: HDEVINFO,
-        deviceInfoData: SP_DEVINFO_DATA
-):
+def GetInstanceId(deviceInfo: HDEVINFO, deviceInfoData: SP_DEVINFO_DATA):
     length = DWORD(0)
-    status = SetupDiGetDeviceInstanceId(deviceInfo,
-                                        byref(deviceInfoData),
-                                        NULL,
-                                        0,
-                                        byref(length))
+    status = SetupDiGetDeviceInstanceId(
+        deviceInfo, byref(deviceInfoData), NULL, 0, byref(length)
+    )
     lastError = GetLastError()
 
-
-    if (status != FALSE and lastError != ERROR_INSUFFICIENT_BUFFER):
+    if status != FALSE and lastError != ERROR_INSUFFICIENT_BUFFER:
         status = FALSE
-        #goto Done
+        # goto Done
         error = GetLastError()
-        print(WinError(get_last_error()))
-
+        log.error(WinError(get_last_error()))
 
     #
     # An extra byte is required for the terminating character
@@ -2571,23 +2576,22 @@ def GetInstanceId(
     #     status = FALSE
     #     #goto Done
     #     error = GetLastError()
-    #     print(WinError(get_last_error()))
+    #     log.error(WinError(get_last_error()))
 
-
-    status = SetupDiGetDeviceInstanceId(deviceInfo,
-                                        byref(deviceInfoData),
-                                        byref(buffer),
-                                        length,
-                                        byref(length))
-    if (not status):
-        #goto Done
+    status = SetupDiGetDeviceInstanceId(
+        deviceInfo, byref(deviceInfoData), byref(buffer), length, byref(length)
+    )
+    if not status:
+        # goto Done
         error = GetLastError()
-        print(WinError(get_last_error()))
+        log.error(WinError(get_last_error()))
 
     return buffer.value
 
+
 def main():
     import time
+
     start = time.time()
     devices, tree = InspectUsbDevices()
     finished = time.time() - start

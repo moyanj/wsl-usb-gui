@@ -848,7 +848,11 @@ class WslUsbGui(wx.Frame):
                     comports[(f"{c.vid:04X}", f"{c.pid:04X}", c.serial_number)] = c.name
                 await asyncio.sleep(0.01)
 
-            raw_devices, tree = InspectUsbDevices()
+            try:
+                raw_devices, tree = InspectUsbDevices()
+            except:
+                log.exception("Failures in InspectUsbDevices")
+                raw_devices = {}
 
             usb_devices = await task
 
@@ -875,8 +879,9 @@ class WslUsbGui(wx.Frame):
                 if self.generic_device_name(device.Description):
                     if device.InstanceId not in self.name_mapping:
                         if details := raw_devices.get(device.InstanceId):
-                            device.OrigDescription = device.Description
-                            device.Description = f"{details.Manufacturer} {details.Product}"
+                            if details.Manufacturer and details.Product:
+                                device.OrigDescription = device.Description
+                                device.Description = f"{details.Manufacturer} {details.Product}"
 
                 try:
                     devid = (vid, pid, sernum) = self.device_ident(device)
@@ -1286,14 +1291,20 @@ class popupRename(wx.Dialog):
         default_btn = wx.Button(self, label=device.OrigDescription)
         top_sizer.Add(default_btn, flag=wx.RIGHT | wx.LEFT | wx.EXPAND, border=20)
 
-        raw_devices, __tree = InspectUsbDevices()
+        try:
+            raw_devices, tree = InspectUsbDevices()
+        except:
+            log.exception("Failures in InspectUsbDevices")
+            raw_devices = {}
+
         device_btn = None
         if details := raw_devices.get(self.instanceId):
-            dev_label = f"{details.Manufacturer} {details.Product}"
+            if details.Manufacturer and details.Product:
+                dev_label = f"{details.Manufacturer} {details.Product}"
 
-            top_sizer.Add(wx.StaticText(self, label="Device Details:"), flag=wx.TOP | wx.LEFT | wx.RIGHT, border=12)
-            device_btn = wx.Button(self, label=dev_label)
-            top_sizer.Add(device_btn, flag=wx.RIGHT | wx.LEFT | wx.EXPAND, border=20)
+                top_sizer.Add(wx.StaticText(self, label="Device Details:"), flag=wx.TOP | wx.LEFT | wx.RIGHT, border=12)
+                device_btn = wx.Button(self, label=dev_label)
+                top_sizer.Add(device_btn, flag=wx.RIGHT | wx.LEFT | wx.EXPAND, border=20)
 
 
         top_sizer.Add(wx.StaticLine(self, style=wx.LI_HORIZONTAL | wx.EXPAND), flag=wx.TOP | wx.BOTTOM | wx.LEFT | wx.RIGHT | wx.EXPAND, border=8)
