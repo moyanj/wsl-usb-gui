@@ -1461,7 +1461,7 @@ async def check_usbipd_version():
     global USBIPD, USBIPD_VERSION
     try:
         vers_str = (await run([USBIPD, "--version"])).stdout
-        vers_parts: re.Match[str] = re.search(r'(\d+)\.(\d+)\.(\d+)\+', vers_str) # type: ignore
+        vers_parts: re.Match[str] = re.search(r'(\d+)\.(\d+)\.(\d+)(?:[-+](\d+))?', vers_str) # type: ignore
         version = tuple((int(v) for v in vers_parts.groups()))
         USBIPD_VERSION = version
     except Exception as ex:
