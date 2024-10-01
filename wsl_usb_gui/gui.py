@@ -781,7 +781,7 @@ class WslUsbGui(wx.Frame):
 
     @staticmethod
     def device_ident(device: Device):
-        vid, pid, serial = re.search(r"\\VID_([0-9A-F]+)&PID_([0-9A-F]+)\\([&0-9A-Z]+)$", device.InstanceId.upper()).groups()
+        vid, pid, serial = re.search(r"\\VID_([0-9A-Fa-f]+)&PID_([0-9A-Fa-f]+)\\([&0-9A-Za-z]+)$", device.InstanceId).groups()
         return vid, pid, serial
 
     async def udev_permissive(self, event=None):
@@ -792,6 +792,9 @@ class WslUsbGui(wx.Frame):
         try:
             vid, pid, serial = self.device_ident(device)
             name = device.Description.replace(" ", "_")
+            # VID and PID must be hex/lowercase. serial on the otherhand must not be converted to lowercase, but copied verbatim.
+            vid = vid.lower()
+            pid = pid.lower()
             udev_rule_match = f'/SUBSYSTEM=="usb.*ATTRS{{idVendor}}=="{vid}".*ATTRS{{idProduct}}=="{pid}".*ENV{{ID_SERIAL_SHORT}}=="{serial}"/d'
             udev_rule = (
                 f'SUBSYSTEM=="usb|hidraw",ATTRS{{idVendor}}=="{vid}",ATTRS{{idProduct}}=="{pid}",ENV{{ID_SERIAL_SHORT}}=="{serial}",MODE="0666",SYMLINK+="usb/{name}"\n'
@@ -809,6 +812,7 @@ class WslUsbGui(wx.Frame):
                 message=f"WSL udev rule added for VID:{vid} PID:{pid}.",
                 style=wx.OK | wx.ICON_INFORMATION,
             )
+
         except AttributeError as ex:
             log.error(f"Could not get device information for udev: {ex}")
             wx.MessageBox(
@@ -845,7 +849,7 @@ class WslUsbGui(wx.Frame):
             comports = {}
             for c in serial.tools.list_ports.comports():
                 if getattr(c, "vid", None) and getattr(c, "pid", None):
-                    comports[(f"{c.vid:04X}", f"{c.pid:04X}", c.serial_number)] = c.name
+                    comports[str((f"{c.vid:04X}", f"{c.pid:04X}", c.serial_number.upper()))] = c.name
                 await asyncio.sleep(0.01)
 
             try:
@@ -884,9 +888,9 @@ class WslUsbGui(wx.Frame):
                                 device.Description = f"{details.Manufacturer.strip()} {details.Product.strip()}"
 
                 try:
-                    devid = (vid, pid, sernum) = self.device_ident(device)
-                    if devid in comports:
-                        windows_com_port = comports[devid]
+                    devid = str(self.device_ident(device)).upper()  # (vid, pid, sernum)
+                    if str(devid) in comports:
+                        windows_com_port = comports[str(devid)]
                         if windows_com_port not in device.Description:
                             device.Description = re.sub(r" ?\(COM\d+\) ?", "", device.Description)
                             device.Description += f" ({windows_com_port})"
