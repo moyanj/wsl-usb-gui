@@ -172,6 +172,8 @@ class WslUsbGui(wx.Frame):
         self.Bind(wx.EVT_MENU, self._open_logs_folder, logs_menu)
         hide_menu = self.filemenu.Append(wx.ID_ANY, "Mi&nimise"," Minimise to Tray")
         self.Bind(wx.EVT_MENU, self.minimise, hide_menu)
+        udev_menu = self.filemenu.Append(wx.ID_ANY, "Udev: allow all"," Add user permissions for all devices udev rule")
+        self.Bind(wx.EVT_MENU, bg_af(self.udev_permissive_all), udev_menu)
         self.filemenu.AppendSeparator()
         exit_menu = self.filemenu.Append(wx.ID_EXIT, "E&xit"," Terminate the program")
         self.Bind(wx.EVT_MENU, self.taskbar.OnExit, exit_menu)
@@ -784,6 +786,24 @@ class WslUsbGui(wx.Frame):
         vid, pid, serial = re.search(r"\\VID_([0-9A-Fa-f]+)&PID_([0-9A-Fa-f]+)\\([&0-9A-Za-z]+)$", device.InstanceId).groups()
         return vid, pid, serial
 
+
+    async def udev_permissive_all(self, event=None):
+        udev_rule = (
+            f'SUBSYSTEM=="usb|hidraw",MODE="0666"\n'
+            f'SUBSYSTEM=="tty",MODE="0666"'
+        )
+        rules_file = "/etc/udev/rules.d/99-wsl-usb-gui.rules"
+        await run([
+            "wsl", "--user", "root", "sh", "-c",
+            f"echo '{udev_rule}' >> {rules_file}; sudo udevadm control --reload-rules; sudo udevadm trigger",
+        ])
+        log.info(f"udev all rule added: {udev_rule}")
+        wx.MessageBox(
+            caption="WSL: Grant User Permissions",
+            message=f"WSL udev user permissions rule added for all usb devices",
+            style=wx.OK | wx.ICON_INFORMATION,
+        )
+
     async def udev_permissive(self, event=None):
         device = self.get_selected_device()
         if not device:
@@ -809,7 +829,7 @@ class WslUsbGui(wx.Frame):
             log.info(f"udev rule added: {udev_rule}")
             wx.MessageBox(
                 caption="WSL: Grant User Permissions",
-                message=f"WSL udev rule added for VID:{vid} PID:{pid}.",
+                message=f"WSL udev user permissions rule added for VID:{vid} PID:{pid}.",
                 style=wx.OK | wx.ICON_INFORMATION,
             )
 
