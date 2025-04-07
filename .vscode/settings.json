@@ -16,7 +16,7 @@
         "--disable=W"
     ],
     "python.linting.flake8Enabled": false,
-    "editor.formatOnSave": true,
+    "editor.formatOnSave": false,
     "editor.formatOnType": true,
     "files.trimTrailingWhitespace": true,
     "files.insertFinalNewline": true,

@@ -1,8 +1,8 @@
-from .logger import log, APP_DIR
-
-import argparse
+import appdirs
 import asyncio
 import json
+import logging
+import logging.handlers
 import os
 import serial.tools.list_ports
 import re
@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import *
 import webbrowser
 import winreg
+import argparse
 
 import wx
 import wx.adv
@@ -33,8 +34,10 @@ from wx.lib.agw.ultimatelistctrl import (
 )
 
 from .version import __version__
-from .usb_monitor import registerDeviceNotification, unregisterDeviceNotification
+from .usb_monitor import registerDeviceNotification, unregisterDeviceNotification, WM_SHOW_EXISTING
 from .win_usb_inspect import InspectUsbDevices, gDeviceList
+from .logger import log, APP_DIR
+
 
 # High DPI Support.
 import ctypes
@@ -429,6 +432,26 @@ class WslUsbGui(wx.Frame):
         if minimised:
             self.Hide()
 
+    # # Override MSWWindowProc to handle the custom message
+    # def MSWWindowProc(self, msg, wparam, lparam):
+    #     if msg == WM_SHOW_EXISTING:
+    #         if self.IsIconized():
+    #             self.Iconize(False)
+    #         if not self.IsShown():
+    #             self.Show(True)
+    #         self.Restore() # Ensure it's not minimized
+    #         self.Raise()   # Bring to front
+    #         log.info("Received WM_SHOW_EXISTING message, brought window to front.")
+    #         return 0 # Indicate message was handled
+
+    #     # Call the default handler for other messages
+    #     try:
+    #         # Attempt to call super's MSWWindowProc if it exists
+    #         return super().MSWWindowProc(msg, wparam, lparam)
+    #     except AttributeError:
+    #          # If super() doesn't have MSWWindowProc, use DefWindowProc
+    #          return ctypes.windll.user32.DefWindowProcW(self.GetHandle(), msg, wparam, lparam)
+
     def Button(self, parent, button_text, command=None, acommand=None):
         btn = wx.Button(parent, label=button_text)
         btn.SetMaxSize(parent.FromDIP(wx.Size(90, 30)))
@@ -582,7 +605,7 @@ class WslUsbGui(wx.Frame):
                     message=msg,
                     style=wx.OK | wx.ICON_INFORMATION,
                 )
-            args_str = ", ".join(f'\\"{arg}\\"' for arg in command[1:])
+            args_str = ", ".join(f'\\"{arg}\"' for arg in command[1:])
 
             result = await run(
                 r'''Powershell -Command "& { Start-Process \"%s\" -ArgumentList @(%s) -Verb RunAs } "'''
@@ -1042,6 +1065,16 @@ class WslUsbGui(wx.Frame):
         popup.ShowModal()
         self.refresh(delay=3)
 
+    def raise_window(self):
+        if self.IsIconized():
+            self.Iconize(False)
+        if not self.IsShown():
+            self.Show(True)
+        self.Restore() # Ensure it's not minimized
+        self.Raise()   # Bring to front
+        log.info("Received WM_SHOW_EXISTING message, brought window to front.")
+        return 0 # Indicate message was handled
+
 
 class ListCtrl(UltimateListCtrl):
     def __init__(self, parent, *args, type: Type, **kw):
@@ -1386,7 +1419,6 @@ class popupRename(wx.Dialog):
 
         self.Close()
 
-
 def bg_af(fn):
     """
     Call async function in background.
@@ -1397,11 +1429,18 @@ def bg_af(fn):
         )
     return wrap
 
-def usb_callback(attach):
-    if attach:
+
+def windows_events_callback(event):
+    if event == "attach":
         log.info(f"USB device attached")
-    else:
+    elif event == "detach":
         log.info(f"USB device detached")
+    elif event == "show":
+        if gui:
+            gui.raise_window()
+    else:
+        log.info(f"unknown windows event")
+
     if gui:
         gui.refresh()
 
@@ -1553,15 +1592,29 @@ async def amain():
         sys.argv[0] = sys.executable
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("--minimised", help="Start app minimised to tray")
+    parser.add_argument("--minimised", action="store_true", help="Start app minimised to tray")
     args = parser.parse_args()
 
     app = wxasync.WxAsyncApp(False)
 
-    instance = wx.SingleInstanceChecker(f"wsl_usb_gui_{wx.GetUserId()}", str(APP_DIR.resolve()))
+    # Generate a unique instance name based on user ID and app dir path hash
+    import hashlib
+    path_hash = hashlib.md5(str(APP_DIR.resolve()).encode()).hexdigest()
+    instance_name = f"wsl_usb_gui_{wx.GetUserId()}_{path_hash}"
+    instance = wx.SingleInstanceChecker(instance_name)
+
     if instance.IsAnotherRunning():
-        wx.MessageBox(caption="Already running", message="Another instance of the app is already running,\ncheck system tray icon to restore instance.", style=wx.OK | wx.ICON_WARNING)
-        return
+        # Find the existing window by title and send a custom message to restore it.
+        window_title = f"WSL USB Manager {__version__}"
+        hwnd = ctypes.windll.user32.FindWindowW(None, window_title)
+        if hwnd:
+            ctypes.windll.user32.PostMessageW(hwnd, WM_SHOW_EXISTING, 0, 0)
+            log.info(f"Found existing instance (HWND: {hwnd}), sent WM_SHOW_EXISTING message.")
+        else:
+            # Fallback if window not found
+            log.warning(f"Another instance is running, but could not find window with title: {window_title}")
+            wx.MessageBox(caption="Already running", message="Another instance of the app is already running,\ncould not bring it to front.", style=wx.OK | wx.ICON_WARNING)
+        return # Exit the new instance
 
     gui = WslUsbGui(minimised=args.minimised)
     app.SetTopWindow(gui)
@@ -1576,7 +1629,7 @@ async def amain():
     gui.refresh(delay=0.5)
 
     # TODO
-    devNotifyHandle = registerDeviceNotification(handle=gui.GetHandle(), callback=usb_callback)
+    devNotifyHandle = registerDeviceNotification(handle=gui.GetHandle(), callback=windows_events_callback)
 
     await gui.check_wsl_udev()
 

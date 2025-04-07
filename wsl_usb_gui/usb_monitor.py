@@ -34,6 +34,10 @@ DBT_DEVICEREMOVECOMPLETE = 0x8004  # device is gone
 DBT_DEVICEARRIVAL = 0x8000  # system detected a new device
 WM_DEVICECHANGE = 0x0219
 
+# Custom Windows message for bringing existing instance to front
+WM_USER = 0x0400
+WM_SHOW_EXISTING = WM_USER + 100
+
 # Windows device GUID to filter on
 GUID_DEVINTERFACE_USB_DEVICE = "{A5DCBF10-6530-11D2-901F-00C04FB951ED}"
 
@@ -106,10 +110,14 @@ def localWndProc(hWnd, msg, wParam, lParam):
                 # working, notifying on everything and filtering the guid here works instead
                 if GUID_DEVINTERFACE_USB_DEVICE.lower() in details.contents.dbcc_name:
                     if wParam in (DBT_DEVICEARRIVAL, DBT_DEVICEREMOVECOMPLETE):
-                        __callback(attach=(wParam == DBT_DEVICEARRIVAL))
+                        if __callback:
+                            __callback(event=("attach" if (wParam == DBT_DEVICEARRIVAL) else "detach"))
         except ValueError:
             print("fail")
 
+    if msg == WM_SHOW_EXISTING:
+        if __callback:
+            __callback(event="show")
     if msg == WM_DESTROY:
         unhookWndProc()
 
@@ -142,7 +150,7 @@ def registerDeviceNotification(
         flags |= DEVICE_NOTIFY_ALL_INTERFACE_CLASSES
 
     ret = RegisterDeviceNotification(handle, ctypes.byref(devIF), flags)
-    
+
     __handle = handle
     __callback = callback
 
