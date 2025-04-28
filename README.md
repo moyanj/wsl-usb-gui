@@ -19,7 +19,7 @@ Available devices in the top pane can be connected to WSL by selecting one and p
 
 The first time this is done for any particular device, a popup will show requesting Administrator permission; this is required by the `usbpid` service to "bind" a device, granting access to that USB device. Once this permission is given the "bound" column will be checked for that device.
 
-Devices that are attached / forwarded to WSL can only be used in WSL, they're no longer visible to windows. They can be removed from WSL and re-conencted to Windows by hitting the Detach button / right-clicking on them and going to "Detach Device". Once detached they'll be listed in the top pane again (with the bound column still checked) and usable in any Windows app like normal.
+Devices that are attached / forwarded to WSL can only be used in WSL, they're no longer visible to windows. They can be removed from WSL and re-connected to Windows by hitting the Detach button / right-clicking on them and going to "Detach Device". Once detached they'll be listed in the top pane again (with the bound column still checked) and usable in any Windows app like normal.
 
 For people using multiple distributions of WSL it's important to note that USB devices are connected to the Linux Kernel itself, not any particular distribution. As WSL2 shares the one Kernel instance among all distros, a conencted USB device will be available to all running distros.
 
@@ -54,8 +54,8 @@ The gui can be maximised again or exitted completely by right clicking on the lo
 Not all USB devices will work out of the box with WSL / linux. For known issues see https://github.com/dorssel/usbipd-win/wiki/Tested-Devices  
 
 Some devices require extra Kernel Drivers, some guidance on compiling your own kernel / modules can be found online eg.
-* https://github.com/dorssel/usbipd-win/wiki/WSL-support#building-your-own-usbip-enabled-wsl-2-kernel
-* https://github.com/jovton/USB-Storage-on-WSL2/blob/master/README.md
+* ["Building your own WSL 2 kernel with additional drivers" on the usbipd-win wiki](https://github.com/dorssel/usbipd-win/wiki/WSL-support#building-your-own-wsl-2-kernel-with-additional-drivers)
+* https://github.com/jovton/USB-Storage-on-WSL2/
 * https://github.com/kevin-doolaeghe/wsl-kernel-modules
 * https://kumekay.com/compiling-custom-kernel-for-wsl2/
 
@@ -97,7 +97,7 @@ wsl --update
 
 Once your WSL is on the current kernel, there are a couple of usbip tools to install from Ubuntu/bash;
 ``` bash
-sudo apt install linux-tools-5.4.0-77-generic hwdata
+sudo apt install linux-tools-generic hwdata
 sudo update-alternatives --install /usr/local/bin/usbip usbip /usr/lib/linux-tools/*/usbip 20
 ```
 
