@@ -605,7 +605,7 @@ class WslUsbGui(wx.Frame):
                     message=msg,
                     style=wx.OK | wx.ICON_INFORMATION,
                 )
-            args_str = ", ".join(f'\\"{arg}\"' for arg in command[1:])
+            args_str = ", ".join(f'\\"{arg}\\"' for arg in command[1:])
 
             result = await run(
                 r'''Powershell -Command "& { Start-Process \"%s\" -ArgumentList @(%s) -Verb RunAs } "'''
