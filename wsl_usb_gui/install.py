@@ -4,6 +4,7 @@ import subprocess
 import sys
 import time
 import wx
+import re
 from pathlib import Path
 
 user_data_dir = Path(appdirs.user_data_dir("wsl-usb-gui", ""))
@@ -133,21 +134,39 @@ def install_client():
     return False
 
 
-def install_server():
-    app_dir = Path(sys.executable).parent.resolve()
+
+
+def find_installers():
+    msi = None
+    msi_vers = (0, 0, 0)
     try:
         src_dir = Path(__file__).parent.parent.resolve()
     except:
         src_dir = Path(".")
     installers = list(app_dir.glob("usbipd-win*.msi")) + list(src_dir.glob("usbipd-win*.msi"))
+    installers.sort()
+    if installers:
+        msi = installers[0]
+        try:
+            msi_vers = tuple((int(v) for v in (re.findall(r'_(\d+\.\d+\.\d+)_', msi.name)[0].split("."))))
+        except:
+            pass
+    return msi, msi_vers
+
+
+app_dir = Path(sys.executable).parent.resolve()
+MSI, MSI_VERS = find_installers()
+
+
+def install_server():
+
     try:
-        if not installers:
+        if not MSI:
             msg = f"Could not find usbipd-win installer in: {app_dir}"
             raise OSError(msg)
 
-        msi = installers[0]
         usbipd_install_log = user_data_dir / "usbipd_install.log"
-        cmd = f'msiexec /i "{msi}" /passive /norestart /log "{usbipd_install_log}"'
+        cmd = f'msiexec /i "{MSI}" /passive /norestart /log "{usbipd_install_log}"'
         logging.info(cmd.encode())
         rsp = run(cmd)
         return True

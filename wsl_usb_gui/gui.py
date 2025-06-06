@@ -37,7 +37,7 @@ from .version import __version__
 from .usb_monitor import registerDeviceNotification, unregisterDeviceNotification, WM_SHOW_EXISTING
 from .win_usb_inspect import InspectUsbDevices, gDeviceList
 from .logger import log, APP_DIR
-
+from .install import MSI_VERS
 
 # High DPI Support.
 import ctypes
@@ -1621,7 +1621,9 @@ async def amain():
 
     await check_usbipd_version()
 
-    if gui.first_run != __version__ and USBIPD_VERSION < (4, 0, 0):
+    bundled_ver = MSI_VERS if MSI_VERS > (0, 0, 0,) else (4, 0, 0)
+
+    if gui.first_run != __version__ and USBIPD_VERSION < bundled_ver:
         log.warning("version upgrade detected, install deps")
         install_deps()
         await check_usbipd_version()
