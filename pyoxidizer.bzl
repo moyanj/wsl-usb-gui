@@ -300,7 +300,11 @@ def make_install(exe):
 
     files.add_path(CWD + "/wsl_usb_gui/usb.ico", CWD + "/wsl_usb_gui")
     files.add_path(CWD + "/wsl_usb_gui/busy.gif", CWD + "/wsl_usb_gui")
-    files.add_path(CWD + "/usbipd-win_4.0.0.msi", CWD + "/")
+    files.add_manifest(glob(
+        include = [CWD + "/usbipd-win_*.msi"],
+        strip_prefix = CWD + "/"
+    ))
+
 
     return files
 
@@ -336,7 +340,11 @@ def make_msi(exe):
     files = FileManifest()
     files.add_path(CWD + "/wsl_usb_gui/usb.ico", CWD + "/wsl_usb_gui")
     files.add_path(CWD + "/wsl_usb_gui/busy.gif", CWD + "/wsl_usb_gui")
-    files.add_path(CWD + "/usbipd-win_4.0.0.msi", CWD + "/")
+    files.add_manifest(glob(
+        include = [CWD + "/usbipd-win_*.msi"],
+        strip_prefix = CWD + "/"
+    ))
+
     msi.add_program_files_manifest(files)
 
     return msi
