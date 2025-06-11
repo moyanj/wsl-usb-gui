@@ -156,6 +156,7 @@ class WslUsbGui(wx.Frame):
         self.hidden_devices = list()
         self.show_hidden = False
         self.refreshing = False
+        self.refreshing_delay = False
 
         self.auto_start_at_boot = False
         self.close_to_tray = True
@@ -876,12 +877,20 @@ class WslUsbGui(wx.Frame):
 
     async def refresh_task(self, delay: float = 0):
         try:
-            if self.refreshing:
+            if self.refreshing_delay:
+                # There's another refresh about to start
                 return
-            self.refreshing = True
             if delay:
+                self.refreshing_delay = True
                 await asyncio.sleep(delay)
+                self.refreshing_delay = False
 
+            if self.refreshing:
+                # Busy right now, might have missed the trigger though to re-run soon
+                asyncio.create_task(self.refresh_task(delay=5))
+                return
+
+            self.refreshing = True
             self.busy_icon.Show()
             self.busy_icon.Play()
 
@@ -954,6 +963,7 @@ class WslUsbGui(wx.Frame):
             self.busy_icon.Stop()
             self.busy_icon.Hide()
             self.refreshing = False
+            self.refreshing_delay = False
 
     def refresh(self, delay=0.0):
         asyncio.get_running_loop().call_soon_threadsafe(
@@ -1431,10 +1441,12 @@ def bg_af(fn):
 
 
 def windows_events_callback(event):
+    delay = 1.0
     if event == "attach":
         log.info(f"USB device attached")
     elif event == "detach":
         log.info(f"USB device detached")
+        delay = 0
     elif event == "show":
         if gui:
             gui.raise_window()
@@ -1442,7 +1454,7 @@ def windows_events_callback(event):
         log.info(f"unknown windows event")
 
     if gui:
-        gui.refresh()
+        gui.refresh(delay=delay)
 
 
 def install_deps():
