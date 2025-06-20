@@ -276,6 +276,9 @@ class WslUsbGui(wx.Frame):
                     entries.extend([
                         ("Unhide", self.unhide_device),
                     ])
+                entries.extend([
+                    ("Create Custom Auto Attach Profile", self.add_custom_profile_context_menu),
+                ])
 
             for entry, fn in entries:
                 menuItem = popupmenu.Append(-1, entry)
@@ -374,10 +377,14 @@ class WslUsbGui(wx.Frame):
         pinned_list_delete_button = self.Button(
             bottom_panel, "Delete Profile", command=self.delete_profile
         )
+        pinned_list_add_custom_button = self.Button(
+            bottom_panel, "Custom Profile", command=self.add_custom_profile
+        )
 
         bottom_controls = wx.BoxSizer(wx.HORIZONTAL)
         bottom_controls.Add(pinned_list_label, 2, wx.EXPAND | wx.TOP | wx.LEFT, border=6)
         bottom_controls.AddStretchSpacer(1)
+        bottom_controls.Add(pinned_list_add_custom_button, 1, wx.TOP, border=6)
         bottom_controls.Add(pinned_list_delete_button, 1, wx.TOP, border=6)
 
         self.pinned_listbox = ListCtrl(bottom_panel, type=Profile)
@@ -387,6 +394,7 @@ class WslUsbGui(wx.Frame):
             popupmenu = wx.Menu()
             entries = [
                 ("Delete Profile", self.delete_profile),
+                ("Edit Profile", self.edit_profile),
             ]
             for entry, fn in entries:
                 menuItem = popupmenu.Append(-1, entry)
@@ -741,6 +749,64 @@ class WslUsbGui(wx.Frame):
         self.save_config()
         self.update_pinned_listbox()
 
+    def add_custom_profile_context_menu(self, event):
+        device = self.get_selection()
+        if not device:
+            log.error("no selection to create profile for")
+            return
+        self.add_custom_profile(device.BusId, device.Description, device.InstanceId)
+        self.refresh(delay=3)
+
+    def edit_profile(self, event=None):
+        """
+        Edit a profile from the pinned listbox.
+        Opens a dialog to input bus ID, description, and instance ID.
+        """
+        selection = self.pinned_listbox.GetFirstSelected()
+        if selection == -1:
+            log.error("no selection to edit")
+            return
+        profile: Profile = self.pinned_listbox.devices[selection]
+        dlg = CustomProfileDialog(self, "Edit", profile.BusId, profile.Description, profile.InstanceId)
+        if dlg.ShowModal() == wx.ID_OK:
+            busid, description, instanceid = dlg.get_values()
+            if not (busid or (instanceid and description)):
+                wx.MessageBox(
+                    "Please provide either Bus ID or both Instance ID and Description.",
+                    "Invalid Input",
+                    wx.OK | wx.ICON_ERROR,
+                )
+                return
+            self.remove_pinned_profile(profile.BusId, profile.Description, profile.InstanceId)
+            profile = self.create_profile(busid, description, instanceid)
+            self.auto_attach_wsl_choice(profile)
+        dlg.Destroy()
+
+    def add_custom_profile_button_handler(self, event):
+        """
+        Handler for the button to add a custom profile.
+        Opens a dialog to input bus ID, description, and instance ID.
+        """
+        self.add_custom_profile()
+
+    def add_custom_profile(self, busid=None, description=None, instanceid=None):
+        """
+        Opens a dialog to add a custom profile.
+        """
+        dlg = CustomProfileDialog(self, "Add", busid, description, instanceid)
+        if dlg.ShowModal() == wx.ID_OK:
+            busid, description, instanceid = dlg.get_values()
+            if not (busid or (instanceid and description)):
+                wx.MessageBox(
+                    "Please provide either Bus ID or both Instance ID and Description.",
+                    "Invalid Input",
+                    wx.OK | wx.ICON_ERROR,
+                )
+                return
+            profile = self.create_profile(busid, description, instanceid)
+            self.auto_attach_wsl_choice(profile)
+        dlg.Destroy()
+
     def get_selection(self, available=False, attached=False, verbose=True) -> Optional[Device]:
         if not available or attached:
             # If nether specified, return either
@@ -996,6 +1062,18 @@ class WslUsbGui(wx.Frame):
             if device.InstanceId == instanceId:
                 return device.Description
 
+    @staticmethod
+    def compare_profile_value(profileString:str, deviceStr:str) -> bool:
+        """
+        Compare a profile string with a device string.
+        Handles None values and empty strings.
+        """
+        checkIsRegex = profileString.startswith("re:")
+        if checkIsRegex:
+            profileString = profileString[3:]  # Remove 're:' prefix for regex matching
+        regexForComparison = re.compile(profileString, re.IGNORECASE)
+        return bool(regexForComparison.search(deviceStr)) if checkIsRegex else profileString == deviceStr
+
     async def attach_if_pinned(self, device, highlight):
         for profile in self.pinned_profiles:
             desc = profile.Description
@@ -1003,11 +1081,11 @@ class WslUsbGui(wx.Frame):
                 # Only fallback to description if no other filter set
                 desc = None
 
-            if profile.BusId and device.BusId.strip() != profile.BusId.strip():
+            if profile.BusId and not self.compare_profile_value(profile.BusId.strip(), device.BusId.strip()):
                 continue
-            if profile.InstanceId and device.InstanceId != profile.InstanceId:
+            if profile.InstanceId and not self.compare_profile_value(profile.InstanceId, device.InstanceId):
                 continue
-            if desc and device.Description.strip() != desc.strip():
+            if desc and not self.compare_profile_value(desc.strip(), device.Description.strip()):
                 continue
             for __retry in reversed(range(3)):
                 ret = await self.attach_wsl_usb(device)
@@ -1542,6 +1620,62 @@ async def check_usbipd_version():
     except Exception as ex:
         log.error(f"Could not read usbipd version: {ex}")
         install_deps()
+
+
+class CustomProfileDialog(wx.Dialog):
+    def __init__(self, parent, prefix="Add", bus_id=None, description=None, instance_id=None):
+        super().__init__(parent, title=f"{prefix} Custom Profile", style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+        # All controls must use self as parent
+        sizer = wx.BoxSizer(wx.VERTICAL)
+
+        label = wx.StaticText(self, label=f"{prefix} custom auto-attach profile:")
+        sizer.Add(label, flag=wx.ALL, border=8)
+
+        grid = wx.FlexGridSizer(3, 2, 8, 8)
+        grid.AddGrowableCol(1, 1)
+
+        busid_label = wx.StaticText(self, label="Bus ID:")
+        self.busid_ctrl = wx.TextCtrl(self, value=bus_id or "")
+        grid.Add(busid_label, flag=wx.ALIGN_CENTER_VERTICAL)
+        grid.Add(self.busid_ctrl, flag=wx.EXPAND)
+
+        description_label = wx.StaticText(self, label="Description:")
+        self.description_ctrl = wx.TextCtrl(self, value=description or "")
+        grid.Add(description_label, flag=wx.ALIGN_CENTER_VERTICAL)
+        grid.Add(self.description_ctrl, flag=wx.EXPAND)
+
+        instanceid_label = wx.StaticText(self, label="Instance ID:")
+        self.instanceid_ctrl = wx.TextCtrl(self, value=instance_id or "")
+        grid.Add(instanceid_label, flag=wx.ALIGN_CENTER_VERTICAL)
+        grid.Add(self.instanceid_ctrl, flag=wx.EXPAND)
+
+        sizer.Add(grid, flag=wx.ALL | wx.EXPAND, border=8)
+
+        btn_sizer = wx.StdDialogButtonSizer()
+        ok_btn = wx.Button(self, wx.ID_OK)
+        cancel_btn = wx.Button(self, wx.ID_CANCEL)
+        btn_sizer.AddButton(ok_btn)
+        btn_sizer.AddButton(cancel_btn)
+        btn_sizer.Realize()
+        sizer.Add(btn_sizer, flag=wx.ALL | wx.ALIGN_CENTER, border=8)
+
+        self.SetSizerAndFit(sizer)
+
+    def get_values(self):
+        bus_id = self.busid_ctrl.GetValue().strip()
+        if not bus_id:
+            bus_id = None
+        description = self.description_ctrl.GetValue().strip()
+        if not description:
+            description = None
+        instance_id = self.instanceid_ctrl.GetValue().strip()
+        if not instance_id:
+            instance_id = None
+        return (
+            bus_id,
+            description,
+            instance_id,
+        )
 
 
 class SettingsWindow(wx.Dialog):
