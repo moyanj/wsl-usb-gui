@@ -49,7 +49,7 @@ except:
 
 DEVICE_COLUMNS = ["bus_id", "description", "bound", "forced"]
 ATTACHED_COLUMNS = ["bus_id", "description", "forced"]  # , "client"]
-PROFILES_COLUMNS = ["bus_id", "description"]
+PROFILES_COLUMNS = ["bus_id", "description", "enabled"]
 
 CONFIG_FILE = APP_DIR / "config.json"
 
@@ -80,6 +80,11 @@ class Profile:
     BusId: Optional[str] = None
     Description: Optional[str] = None
     InstanceId: Optional[str] = None
+    enabled: Optional[bool] = None
+
+    def __post_init__(self):
+        if self.enabled is None:
+            self.enabled = True
 
 gui: Optional["WslUsbGui"] = None
 loop = None
@@ -407,6 +412,20 @@ class WslUsbGui(wx.Frame):
 
         self.pinned_listbox.Bind(wx.EVT_LIST_ITEM_RIGHT_CLICK, _profile_menu)
 
+        async def profile_checked(event):
+            pinned_listbox = event.EventObject
+            # print(f"aaaaaaa: {pinned_listbox.__dict__=}")
+            # await asyncio.sleep(0.1)  # Ensure the event is processed after the item is checked
+            profile: Profile = pinned_listbox.devices[event.Index]
+            enabled = pinned_listbox.GetItem(event.Index, col=2).IsChecked()
+            if profile.enabled != enabled:
+                profile.enabled = enabled
+                self.save_config()
+                self.refresh(delay=1.0)
+            return True
+
+        wxasync.AsyncBind(EVT_LIST_ITEM_CHECKED, profile_checked, self.pinned_listbox)
+
         bottom_sizer.Add(bottom_controls, flag=wx.EXPAND | wx.ALL, border=6)
         bottom_sizer.Add(self.pinned_listbox, proportion=1, flag=wx.EXPAND | wx.ALL, border=6)
 
@@ -503,8 +522,8 @@ class WslUsbGui(wx.Frame):
         webbrowser.open_new("https://gitlab.com/alelec/wsl-usb-gui")
 
     @staticmethod
-    def create_profile(busid, description, instanceid):
-        return Profile(*(None if a == "None" else a for a in (busid, description, instanceid)))
+    def create_profile(busid, description, instanceid, enabled=None):
+        return Profile(*(None if a == "None" else a for a in (busid, description, instanceid, enabled)))
 
     def show_settings_window(self, _):
         settings_window = SettingsWindow(self)
@@ -1075,7 +1094,8 @@ class WslUsbGui(wx.Frame):
         return bool(regexForComparison.search(deviceStr)) if checkIsRegex else profileString == deviceStr
 
     async def attach_if_pinned(self, device, highlight):
-        for profile in self.pinned_profiles:
+        enabledProfiles = [p for p in self.pinned_profiles if p.enabled]
+        for profile in enabledProfiles:
             desc = profile.Description
             if profile.InstanceId or profile.BusId:
                 # Only fallback to description if no other filter set
