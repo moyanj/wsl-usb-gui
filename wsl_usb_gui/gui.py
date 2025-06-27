@@ -347,6 +347,7 @@ class WslUsbGui(wx.Frame):
                 ("Auto-Attach Device", self.auto_attach_wsl),
                 ("Rename Device", self.rename_device),
                 ("WSL: Grant User Permissions", bg_af(self.udev_permissive)),
+                ("WSL: Set On-Connect Command", self.udev_on_connect_command),
             ]
             for entry, fn in entries:
                 menuItem = popupmenu.Append(-1, entry)
@@ -907,6 +908,45 @@ class WslUsbGui(wx.Frame):
             style=wx.OK | wx.ICON_INFORMATION,
         )
 
+    async def get_existing_udev_rules(self, vid, pid, serial):
+        """Parse existing udev rules for this device to get current permissions and RUN command"""
+        rules_file = "/etc/udev/rules.d/99-wsl-usb-gui.rules"
+        
+        try:
+            result = await run([
+                "wsl", "--user", "root", "sh", "-c",
+                f"cat {rules_file} 2>/dev/null || echo ''"
+            ])
+            
+            if result.returncode != 0:
+                return None, None
+            
+            rules_content = result.stdout
+            
+            # Look for rules matching this device
+            import re
+            pattern = rf'ATTRS\{{idVendor\}}=="{vid}".*ATTRS\{{idProduct\}}=="{pid}".*ENV\{{ID_SERIAL_SHORT\}}=="{serial}"'
+            
+            permissions_enabled = False
+            run_command = None
+            
+            for line in rules_content.split('\n'):
+                if re.search(pattern, line):
+                    # Check if this line has MODE="0666" (permissions)
+                    if 'MODE="0666"' in line:
+                        permissions_enabled = True
+                    
+                    # Check if this line has RUN command
+                    run_match = re.search(r'RUN\+="([^"]+)"', line)
+                    if run_match:
+                        run_command = run_match.group(1)
+            
+            return permissions_enabled, run_command
+            
+        except Exception as ex:
+            log.error(f"Could not read existing udev rules: {ex}")
+            return None, None
+
     async def udev_permissive(self, event=None):
         device = self.get_selected_device()
         if not device:
@@ -943,6 +983,12 @@ class WslUsbGui(wx.Frame):
                 message=f"ERROR: Failed to add udev rule.",
                 style=wx.OK | wx.ICON_WARNING,
             )
+
+    def udev_on_connect_command(self, event=None):
+        device = self.get_selected_device()
+        if not device:
+            return
+        popupOnConnectCommand(self, device).ShowModal()
 
     @staticmethod
     def window_is_focussed():
@@ -1557,6 +1603,162 @@ class popupRename(wx.Dialog):
         self.gui.refresh()
 
         self.Close()
+
+
+class popupOnConnectCommand(wx.Dialog):
+    def __init__(self, parent: WslUsbGui, device: Device):
+        super().__init__(parent, title="Set On-Connect Command")
+        
+        self.gui = parent
+        self.device = device
+        self.vid, self.pid, self.serial = self.gui.device_ident(device)
+        self.vid = self.vid.lower()
+        self.pid = self.pid.lower()
+        
+        top_sizer = wx.BoxSizer(wx.VERTICAL)
+        
+        # Device info
+        device_label = f"Device: {device.Description} (VID:{self.vid} PID:{self.pid})"
+        message = wx.StaticText(self, label=device_label)
+        font = message.GetFont()
+        font.SetWeight(wx.BOLD)
+        message.SetFont(font)
+        top_sizer.Add(message, flag=wx.TOP | wx.LEFT | wx.RIGHT, border=12)
+        
+        # Description
+        desc_text = wx.StaticText(self, label="Configure command to run when this device is connected:")
+        top_sizer.Add(desc_text, flag=wx.TOP | wx.LEFT | wx.RIGHT, border=12)
+        
+        top_sizer.Add(wx.StaticLine(self, style=wx.LI_HORIZONTAL | wx.EXPAND), 
+                     flag=wx.TOP | wx.BOTTOM | wx.LEFT | wx.RIGHT | wx.EXPAND, border=8)
+        
+        # Command text field
+        command_label = wx.StaticText(self, label="On-Connect Command:")
+        top_sizer.Add(command_label, flag=wx.LEFT | wx.RIGHT, border=12)
+        
+        self.command_text = wx.TextCtrl(self, -1, "", size=wx.Size(400, self.FromDIP(26)))
+        top_sizer.Add(self.command_text, flag=wx.RIGHT | wx.LEFT | wx.EXPAND, border=12)
+        
+        # Permissions checkbox
+        self.permissions_checkbox = wx.CheckBox(self, label="Enable user permissions (MODE=\"0666\")")
+        top_sizer.Add(self.permissions_checkbox, flag=wx.TOP | wx.LEFT | wx.RIGHT, border=12)
+        
+        # Buttons
+        btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
+        ok_btn = wx.Button(self, label="OK", size=self.FromDIP(wx.Size(60, 24)))
+        cancel_btn = wx.Button(self, label="Cancel", size=self.FromDIP(wx.Size(60, 24)))
+        btn_sizer.Add(ok_btn, border=6)
+        btn_sizer.Add(cancel_btn, border=6)
+        top_sizer.Add(btn_sizer, flag=wx.BOTTOM | wx.TOP | wx.RIGHT | wx.LEFT | wx.EXPAND, border=12)
+        
+        self.Bind(wx.EVT_BUTTON, self.on_ok, ok_btn)
+        self.Bind(wx.EVT_BUTTON, self.on_cancel, cancel_btn)
+        
+        ok_btn.SetDefault()
+        
+        self.SetSizerAndFit(top_sizer)
+        
+        # Load existing settings
+        self.load_existing_settings()
+    
+    def load_existing_settings(self):
+        """Load existing udev rule settings for this device"""
+        async def load_async():
+            try:
+                permissions_enabled, run_command = await self.gui.get_existing_udev_rules(
+                    self.vid, self.pid, self.serial
+                )
+                
+                if permissions_enabled is not None:
+                    self.permissions_checkbox.SetValue(permissions_enabled)
+                
+                if run_command is not None:
+                    self.command_text.SetValue(run_command)
+                    
+            except Exception as ex:
+                log.error(f"Could not load existing udev settings: {ex}")
+        
+        # Run the async function
+        asyncio.get_running_loop().call_soon_threadsafe(
+            asyncio.ensure_future, load_async()
+        )
+    
+    def on_cancel(self, event):
+        self.Close()
+    
+    def on_ok(self, event):
+        command = self.command_text.GetValue().strip()
+        permissions_enabled = self.permissions_checkbox.GetValue()
+        
+        async def save_async():
+            try:
+                await self.save_udev_rule(command, permissions_enabled)
+                wx.CallAfter(self.Close)
+            except Exception as ex:
+                log.error(f"Could not save udev rule: {ex}")
+                wx.CallAfter(wx.MessageBox, 
+                           "ERROR: Failed to save udev rule.", 
+                           "Error", 
+                           wx.OK | wx.ICON_ERROR)
+        
+        # Run the async function
+        asyncio.get_running_loop().call_soon_threadsafe(
+            asyncio.ensure_future, save_async()
+        )
+    
+    async def save_udev_rule(self, command, permissions_enabled):
+        """Save the udev rule with the specified command and permissions"""
+        name = self.device.Description.replace(" ", "_")
+        rules_file = "/etc/udev/rules.d/99-wsl-usb-gui.rules"
+        
+        # Remove existing rules for this device
+        udev_rule_match = f'/SUBSYSTEM=="usb.*ATTRS{{idVendor}}=="{self.vid}".*ATTRS{{idProduct}}=="{self.pid}".*ENV{{ID_SERIAL_SHORT}}=="{self.serial}"/d'
+        
+        # Build new rules
+        rules = []
+        
+        if permissions_enabled or command:
+            # Base attributes for both subsystems
+            base_attrs = f'ATTRS{{idVendor}}=="{self.vid}",ATTRS{{idProduct}}=="{self.pid}",ENV{{ID_SERIAL_SHORT}}=="{self.serial}"'
+            
+            # USB/hidraw rule
+            usb_rule_parts = [f'SUBSYSTEM=="usb|hidraw"', base_attrs]
+            if permissions_enabled:
+                usb_rule_parts.extend([f'MODE="0666"', f'SYMLINK+="usb/{name}"'])
+            if command:
+                usb_rule_parts.append(f'RUN+="{command}"')
+            rules.append(','.join(usb_rule_parts))
+            
+            # TTY rule
+            tty_rule_parts = [f'SUBSYSTEM=="tty"', base_attrs]
+            if permissions_enabled:
+                tty_rule_parts.extend([f'MODE="0666"', f'SYMLINK+="tty/{name}"'])
+            if command:
+                tty_rule_parts.append(f'RUN+="{command}"')
+            rules.append(','.join(tty_rule_parts))
+        
+        # Execute the update
+        if rules:
+            udev_rule = '\n'.join(rules)
+            await run([
+                "wsl", "--user", "root", "sh", "-c",
+                f"sed -i '{udev_rule_match}' {rules_file}; echo '{udev_rule}' >> {rules_file}; sudo udevadm control --reload-rules; sudo udevadm trigger",
+            ])
+            log.info(f"udev rule saved: {udev_rule}")
+        else:
+            # Just remove existing rules if no settings specified
+            await run([
+                "wsl", "--user", "root", "sh", "-c",
+                f"sed -i '{udev_rule_match}' {rules_file}; sudo udevadm control --reload-rules; sudo udevadm trigger",
+            ])
+            log.info(f"udev rules removed for device VID:{self.vid} PID:{self.pid}")
+        
+        # Show success message
+        wx.CallAfter(wx.MessageBox,
+                   f"Udev rule updated for VID:{self.vid} PID:{self.pid}",
+                   "Success",
+                   wx.OK | wx.ICON_INFORMATION)
+
 
 def bg_af(fn):
     """
