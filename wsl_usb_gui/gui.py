@@ -1082,16 +1082,20 @@ class WslUsbGui(wx.Frame):
                 return device.Description
 
     @staticmethod
-    def compare_profile_value(profileString:str, deviceStr:str) -> bool:
+    def compare_profile_value(profileString: str, deviceStr: str) -> bool:
         """
         Compare a profile string with a device string.
         Handles None values and empty strings.
         """
+        profileString = profileString.strip()
+        deviceStr = deviceStr.strip()
+
         checkIsRegex = profileString.startswith("re:")
         if checkIsRegex:
             profileString = profileString[3:]  # Remove 're:' prefix for regex matching
-        regexForComparison = re.compile(profileString, re.IGNORECASE)
-        return bool(regexForComparison.search(deviceStr)) if checkIsRegex else profileString == deviceStr
+            regexForComparison = re.compile(profileString, re.IGNORECASE)
+            return bool(regexForComparison.search(deviceStr)) if checkIsRegex else profileString == deviceStr
+        return profileString == deviceStr
 
     async def attach_if_pinned(self, device, highlight):
         enabledProfiles = [p for p in self.pinned_profiles if p.enabled]
@@ -1101,11 +1105,11 @@ class WslUsbGui(wx.Frame):
                 # Only fallback to description if no other filter set
                 desc = None
 
-            if profile.BusId and not self.compare_profile_value(profile.BusId.strip(), device.BusId.strip()):
+            if profile.BusId and not self.compare_profile_value(profile.BusId, device.BusId):
                 continue
             if profile.InstanceId and not self.compare_profile_value(profile.InstanceId, device.InstanceId):
                 continue
-            if desc and not self.compare_profile_value(desc.strip(), device.Description.strip()):
+            if desc and not self.compare_profile_value(desc, device.Description):
                 continue
             for __retry in reversed(range(3)):
                 ret = await self.attach_wsl_usb(device)
