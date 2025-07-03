@@ -1682,25 +1682,49 @@ class CustomProfileDialog(wx.Dialog):
         label = wx.StaticText(self, label=f"{prefix} custom auto-attach profile:")
         sizer.Add(label, flag=wx.ALL, border=8)
 
+        # Add help text explaining regex syntax
+        help_text = wx.StaticText(self, label="Tip: Use 're:' prefix for regex patterns (e.g., 're:USB.*Storage')")
+        help_text.SetFont(help_text.GetFont().Italic())
+        help_text.SetForegroundColour(wx.Colour(100, 100, 100))
+        sizer.Add(help_text, flag=wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)
+
         grid = wx.FlexGridSizer(3, 2, 8, 8)
         grid.AddGrowableCol(1, 1)
 
         busid_label = wx.StaticText(self, label="Bus ID:")
-        self.busid_ctrl = wx.TextCtrl(self, value=bus_id or "")
+        self.busid_ctrl = wx.TextCtrl(self, value=bus_id or "", size=(400, -1))
         grid.Add(busid_label, flag=wx.ALIGN_CENTER_VERTICAL)
         grid.Add(self.busid_ctrl, flag=wx.EXPAND)
 
         description_label = wx.StaticText(self, label="Description:")
-        self.description_ctrl = wx.TextCtrl(self, value=description or "")
+        self.description_ctrl = wx.TextCtrl(self, value=description or "", size=(400, -1))
         grid.Add(description_label, flag=wx.ALIGN_CENTER_VERTICAL)
         grid.Add(self.description_ctrl, flag=wx.EXPAND)
 
         instanceid_label = wx.StaticText(self, label="Instance ID:")
-        self.instanceid_ctrl = wx.TextCtrl(self, value=instance_id or "")
+        self.instanceid_ctrl = wx.TextCtrl(self, value=instance_id or "", size=(400, -1))
         grid.Add(instanceid_label, flag=wx.ALIGN_CENTER_VERTICAL)
         grid.Add(self.instanceid_ctrl, flag=wx.EXPAND)
 
         sizer.Add(grid, flag=wx.ALL | wx.EXPAND, border=8)
+
+        # Add examples section
+        examples_box = wx.StaticBox(self, label="Examples")
+        examples_sizer = wx.StaticBoxSizer(examples_box, wx.VERTICAL)
+        
+        examples = [
+            "Exact match: '2-1.3' (Bus ID)",
+            "Regex match: 're:USB.*Storage' (Description)",
+            "Regex match: 're:VID_0403&PID_6001' (Instance ID)",
+            "Regex match: 're:2-1\\.[0-9]+' (Bus ID pattern)"
+        ]
+        
+        for example in examples:
+            example_text = wx.StaticText(self, label=example)
+            example_text.SetFont(example_text.GetFont().Scale(0.9))
+            examples_sizer.Add(example_text, flag=wx.ALL, border=2)
+        
+        sizer.Add(examples_sizer, flag=wx.ALL | wx.EXPAND, border=8)
 
         btn_sizer = wx.StdDialogButtonSizer()
         ok_btn = wx.Button(self, wx.ID_OK)
@@ -1708,9 +1732,41 @@ class CustomProfileDialog(wx.Dialog):
         btn_sizer.AddButton(ok_btn)
         btn_sizer.AddButton(cancel_btn)
         btn_sizer.Realize()
+        
+        # Bind OK button to validation
+        ok_btn.Bind(wx.EVT_BUTTON, self.on_ok)
+        
         sizer.Add(btn_sizer, flag=wx.ALL | wx.ALIGN_CENTER, border=8)
 
         self.SetSizerAndFit(sizer)
+        self.SetMinSize((600, -1))  # Set minimum width
+
+    def on_ok(self, event):
+        """Validate regex patterns before accepting the dialog"""
+        bus_id, description, instance_id = self.get_values()
+        
+        # Validate regex patterns
+        fields = [
+            ("Bus ID", bus_id),
+            ("Description", description),
+            ("Instance ID", instance_id)
+        ]
+        
+        for field_name, value in fields:
+            if value and value.startswith("re:"):
+                pattern = value[3:]
+                try:
+                    re.compile(pattern)
+                except re.error as e:
+                    wx.MessageBox(
+                        f"Invalid regex pattern in {field_name}:\n{pattern}\n\nError: {str(e)}",
+                        "Invalid Regex",
+                        wx.OK | wx.ICON_ERROR,
+                        self
+                    )
+                    return
+        
+        event.Skip()  # Continue with default OK behavior
 
     def get_values(self):
         bus_id = self.busid_ctrl.GetValue().strip()
