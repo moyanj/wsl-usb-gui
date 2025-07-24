@@ -162,6 +162,7 @@ class WslUsbGui(wx.Frame):
         self.show_hidden = False
         self.refreshing = False
         self.refreshing_delay = False
+        self._regex_cache = {}  # Cache for compiled regex patterns
 
         self.auto_start_at_boot = False
         self.close_to_tray = True
@@ -801,13 +802,6 @@ class WslUsbGui(wx.Frame):
             self.auto_attach_wsl_choice(profile)
         dlg.Destroy()
 
-    def add_custom_profile_button_handler(self, event):
-        """
-        Handler for the button to add a custom profile.
-        Opens a dialog to input bus ID, description, and instance ID.
-        """
-        self.add_custom_profile()
-
     def add_custom_profile(self, busid=None, description=None, instanceid=None):
         """
         Opens a dialog to add a custom profile.
@@ -1081,11 +1075,11 @@ class WslUsbGui(wx.Frame):
             if device.InstanceId == instanceId:
                 return device.Description
 
-    @staticmethod
-    def compare_profile_value(profileString: str, deviceStr: str) -> bool:
+    def compare_profile_value(self, profileString: str, deviceStr: str) -> bool:
         """
         Compare a profile string with a device string.
         Handles None values and empty strings.
+        Supports regex patterns prefixed with "re:"
         """
         profileString = profileString.strip()
         deviceStr = deviceStr.strip()
@@ -1093,8 +1087,17 @@ class WslUsbGui(wx.Frame):
         checkIsRegex = profileString.startswith("re:")
         if checkIsRegex:
             profileString = profileString[3:]  # Remove 're:' prefix for regex matching
-            regexForComparison = re.compile(profileString, re.IGNORECASE)
-            return bool(regexForComparison.search(deviceStr)) if checkIsRegex else profileString == deviceStr
+            
+            # Check cache for compiled regex
+            if profileString not in self._regex_cache:
+                try:
+                    self._regex_cache[profileString] = re.compile(profileString, re.IGNORECASE)
+                except re.error:
+                    log.error(f"Invalid regex pattern: {profileString}")
+                    return False
+            
+            regex = self._regex_cache[profileString]
+            return bool(regex.search(deviceStr))
         return profileString == deviceStr
 
     async def attach_if_pinned(self, device, highlight):
@@ -1159,7 +1162,31 @@ class WslUsbGui(wx.Frame):
             return  # no selected item
         log.info(f"Detach {device.BusId} {device.Description}")
 
-        self.remove_pinned_profile(device.BusId, device.Description, device.InstanceId)
+        # Find and disable matching profiles to prevent auto re-attach
+        profiles_disabled = 0
+        for profile in self.pinned_profiles:
+            desc = profile.Description
+            if profile.InstanceId or profile.BusId:
+                # Only fallback to description if no other filter set
+                desc = None
+
+            # Check if this profile matches the device
+            if profile.BusId and not self.compare_profile_value(profile.BusId, device.BusId):
+                continue
+            if profile.InstanceId and not self.compare_profile_value(profile.InstanceId, device.InstanceId):
+                continue
+            if desc and not self.compare_profile_value(desc, device.Description):
+                continue
+            
+            # This profile matches - disable it
+            if profile.enabled:
+                profile.enabled = False
+                profiles_disabled += 1
+                log.info(f"Disabled matching profile: BusId={profile.BusId}, Description={profile.Description}, InstanceId={profile.InstanceId}")
+
+        if profiles_disabled > 0:
+            self.save_config()
+            self.update_pinned_listbox()
 
         await self.detach_wsl_usb(device.BusId)
         self.refresh(delay=2)
