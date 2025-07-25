@@ -384,6 +384,9 @@ class WslUsbGui(wx.Frame):
         pinned_list_delete_button = self.Button(
             bottom_panel, "Delete Profile", command=self.delete_profile
         )
+        pinned_list_edit_button = self.Button(
+            bottom_panel, "Edit Profile", command=self.edit_profile
+        )
         pinned_list_add_custom_button = self.Button(
             bottom_panel, "Custom Profile", command=self.add_custom_profile
         )
@@ -392,6 +395,7 @@ class WslUsbGui(wx.Frame):
         bottom_controls.Add(pinned_list_label, 2, wx.EXPAND | wx.TOP | wx.LEFT, border=6)
         bottom_controls.AddStretchSpacer(1)
         bottom_controls.Add(pinned_list_add_custom_button, 1, wx.TOP, border=6)
+        bottom_controls.Add(pinned_list_edit_button, 1, wx.TOP, border=6)
         bottom_controls.Add(pinned_list_delete_button, 1, wx.TOP, border=6)
 
         self.pinned_listbox = ListCtrl(bottom_panel, type=Profile)
@@ -739,7 +743,7 @@ class WslUsbGui(wx.Frame):
                 InstanceId=profile.InstanceId,
                 enabled=profile.enabled
             )
-            
+
             # If no description, try to look it up or use InstanceId
             if not display_profile.Description:
                 looked_up = self.lookup_description(profile.InstanceId)
@@ -747,7 +751,7 @@ class WslUsbGui(wx.Frame):
                     display_profile.Description = looked_up
                 elif profile.InstanceId:
                     display_profile.Description = f"[{profile.InstanceId}]"
-            
+
             highlight = focus is not None and profile == focus
             self.pinned_listbox.Append(display_profile, highlight=highlight)
 
@@ -924,38 +928,38 @@ class WslUsbGui(wx.Frame):
     async def get_existing_udev_rules(self, vid, pid, serial):
         """Parse existing udev rules for this device to get current permissions and RUN command"""
         rules_file = "/etc/udev/rules.d/99-wsl-usb-gui.rules"
-        
+
         try:
             result = await run([
                 "wsl", "--user", "root", "sh", "-c",
                 f"cat {rules_file} 2>/dev/null || echo ''"
             ])
-            
+
             if result.returncode != 0:
                 return None, None
-            
+
             rules_content = result.stdout
-            
+
             # Look for rules matching this device
             import re
             pattern = rf'ATTRS\{{idVendor\}}=="{vid}".*ATTRS\{{idProduct\}}=="{pid}".*ENV\{{ID_SERIAL_SHORT\}}=="{serial}"'
-            
+
             permissions_enabled = False
             run_command = None
-            
+
             for line in rules_content.split('\n'):
                 if re.search(pattern, line):
                     # Check if this line has MODE="0666" (permissions)
                     if 'MODE="0666"' in line:
                         permissions_enabled = True
-                    
+
                     # Check if this line has RUN command
                     run_match = re.search(r'RUN\+="([^"]+)"', line)
                     if run_match:
                         run_command = run_match.group(1)
-            
+
             return permissions_enabled, run_command
-            
+
         except Exception as ex:
             log.error(f"Could not read existing udev rules: {ex}")
             return None, None
@@ -1146,7 +1150,7 @@ class WslUsbGui(wx.Frame):
         checkIsRegex = profileString.startswith("re:")
         if checkIsRegex:
             profileString = profileString[3:]  # Remove 're:' prefix for regex matching
-            
+
             # Check cache for compiled regex
             if profileString not in self._regex_cache:
                 try:
@@ -1154,7 +1158,7 @@ class WslUsbGui(wx.Frame):
                 except re.error:
                     log.error(f"Invalid regex pattern: {profileString}")
                     return False
-            
+
             regex = self._regex_cache[profileString]
             return bool(regex.search(deviceStr))
         return profileString == deviceStr
@@ -1163,7 +1167,7 @@ class WslUsbGui(wx.Frame):
         enabledProfiles = [p for p in self.pinned_profiles if p.enabled]
         for profile in enabledProfiles:
             desc = profile.Description
-            if profile.InstanceId or profile.BusId:
+            if (profile.InstanceId or profile.BusId) and not str(desc).startswith("re:"):
                 # Only fallback to description if no other filter set
                 desc = None
 
@@ -1236,7 +1240,7 @@ class WslUsbGui(wx.Frame):
                 continue
             if desc and not self.compare_profile_value(desc, device.Description):
                 continue
-            
+
             # This profile matches - disable it
             if profile.enabled:
                 profile.enabled = False
@@ -1621,15 +1625,15 @@ class popupRename(wx.Dialog):
 class popupOnConnectCommand(wx.Dialog):
     def __init__(self, parent: WslUsbGui, device: Device):
         super().__init__(parent, title="Set On-Connect Command")
-        
+
         self.gui = parent
         self.device = device
         self.vid, self.pid, self.serial = self.gui.device_ident(device)
         self.vid = self.vid.lower()
         self.pid = self.pid.lower()
-        
+
         top_sizer = wx.BoxSizer(wx.VERTICAL)
-        
+
         # Device info
         device_label = f"Device: {device.Description} (VID:{self.vid} PID:{self.pid})"
         message = wx.StaticText(self, label=device_label)
@@ -1637,25 +1641,25 @@ class popupOnConnectCommand(wx.Dialog):
         font.SetWeight(wx.BOLD)
         message.SetFont(font)
         top_sizer.Add(message, flag=wx.TOP | wx.LEFT | wx.RIGHT, border=12)
-        
+
         # Description
         desc_text = wx.StaticText(self, label="Configure command to run when this device is connected:")
         top_sizer.Add(desc_text, flag=wx.TOP | wx.LEFT | wx.RIGHT, border=12)
-        
-        top_sizer.Add(wx.StaticLine(self, style=wx.LI_HORIZONTAL | wx.EXPAND), 
+
+        top_sizer.Add(wx.StaticLine(self, style=wx.LI_HORIZONTAL | wx.EXPAND),
                      flag=wx.TOP | wx.BOTTOM | wx.LEFT | wx.RIGHT | wx.EXPAND, border=8)
-        
+
         # Command text field
         command_label = wx.StaticText(self, label="On-Connect Command:")
         top_sizer.Add(command_label, flag=wx.LEFT | wx.RIGHT, border=12)
-        
+
         self.command_text = wx.TextCtrl(self, -1, "", size=wx.Size(400, self.FromDIP(26)))
         top_sizer.Add(self.command_text, flag=wx.RIGHT | wx.LEFT | wx.EXPAND, border=12)
-        
+
         # Permissions checkbox
         self.permissions_checkbox = wx.CheckBox(self, label="Enable user permissions (MODE=\"0666\")")
         top_sizer.Add(self.permissions_checkbox, flag=wx.TOP | wx.LEFT | wx.RIGHT, border=12)
-        
+
         # Buttons
         btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
         ok_btn = wx.Button(self, label="OK", size=self.FromDIP(wx.Size(60, 24)))
@@ -1663,17 +1667,17 @@ class popupOnConnectCommand(wx.Dialog):
         btn_sizer.Add(ok_btn, border=6)
         btn_sizer.Add(cancel_btn, border=6)
         top_sizer.Add(btn_sizer, flag=wx.BOTTOM | wx.TOP | wx.RIGHT | wx.LEFT | wx.EXPAND, border=12)
-        
+
         self.Bind(wx.EVT_BUTTON, self.on_ok, ok_btn)
         self.Bind(wx.EVT_BUTTON, self.on_cancel, cancel_btn)
-        
+
         ok_btn.SetDefault()
-        
+
         self.SetSizerAndFit(top_sizer)
-        
+
         # Load existing settings
         self.load_existing_settings()
-    
+
     def load_existing_settings(self):
         """Load existing udev rule settings for this device"""
         async def load_async():
@@ -1681,59 +1685,59 @@ class popupOnConnectCommand(wx.Dialog):
                 permissions_enabled, run_command = await self.gui.get_existing_udev_rules(
                     self.vid, self.pid, self.serial
                 )
-                
+
                 if permissions_enabled is not None:
                     self.permissions_checkbox.SetValue(permissions_enabled)
-                
+
                 if run_command is not None:
                     self.command_text.SetValue(run_command)
-                    
+
             except Exception as ex:
                 log.error(f"Could not load existing udev settings: {ex}")
-        
+
         # Run the async function
         asyncio.get_running_loop().call_soon_threadsafe(
             asyncio.ensure_future, load_async()
         )
-    
+
     def on_cancel(self, event):
         self.Close()
-    
+
     def on_ok(self, event):
         command = self.command_text.GetValue().strip()
         permissions_enabled = self.permissions_checkbox.GetValue()
-        
+
         async def save_async():
             try:
                 await self.save_udev_rule(command, permissions_enabled)
                 wx.CallAfter(self.Close)
             except Exception as ex:
                 log.error(f"Could not save udev rule: {ex}")
-                wx.CallAfter(wx.MessageBox, 
-                           "ERROR: Failed to save udev rule.", 
-                           "Error", 
+                wx.CallAfter(wx.MessageBox,
+                           "ERROR: Failed to save udev rule.",
+                           "Error",
                            wx.OK | wx.ICON_ERROR)
-        
+
         # Run the async function
         asyncio.get_running_loop().call_soon_threadsafe(
             asyncio.ensure_future, save_async()
         )
-    
+
     async def save_udev_rule(self, command, permissions_enabled):
         """Save the udev rule with the specified command and permissions"""
         name = self.device.Description.replace(" ", "_")
         rules_file = "/etc/udev/rules.d/99-wsl-usb-gui.rules"
-        
+
         # Remove existing rules for this device
         udev_rule_match = f'/SUBSYSTEM=="usb.*ATTRS{{idVendor}}=="{self.vid}".*ATTRS{{idProduct}}=="{self.pid}".*ENV{{ID_SERIAL_SHORT}}=="{self.serial}"/d'
-        
+
         # Build new rules
         rules = []
-        
+
         if permissions_enabled or command:
             # Base attributes for both subsystems
             base_attrs = f'ATTRS{{idVendor}}=="{self.vid}",ATTRS{{idProduct}}=="{self.pid}",ENV{{ID_SERIAL_SHORT}}=="{self.serial}"'
-            
+
             # USB/hidraw rule
             usb_rule_parts = [f'SUBSYSTEM=="usb|hidraw"', base_attrs]
             if permissions_enabled:
@@ -1741,7 +1745,7 @@ class popupOnConnectCommand(wx.Dialog):
             if command:
                 usb_rule_parts.append(f'RUN+="{command}"')
             rules.append(','.join(usb_rule_parts))
-            
+
             # TTY rule
             tty_rule_parts = [f'SUBSYSTEM=="tty"', base_attrs]
             if permissions_enabled:
@@ -1749,7 +1753,7 @@ class popupOnConnectCommand(wx.Dialog):
             if command:
                 tty_rule_parts.append(f'RUN+="{command}"')
             rules.append(','.join(tty_rule_parts))
-        
+
         # Execute the update
         if rules:
             udev_rule = '\n'.join(rules)
@@ -1765,7 +1769,7 @@ class popupOnConnectCommand(wx.Dialog):
                 f"sed -i '{udev_rule_match}' {rules_file}; sudo udevadm control --reload-rules; sudo udevadm trigger",
             ])
             log.info(f"udev rules removed for device VID:{self.vid} PID:{self.pid}")
-        
+
         # Show success message
         wx.CallAfter(wx.MessageBox,
                    f"Udev rule updated for VID:{self.vid} PID:{self.pid}",
@@ -1926,19 +1930,19 @@ class CustomProfileDialog(wx.Dialog):
         # Add examples section
         examples_box = wx.StaticBox(self, label="Examples")
         examples_sizer = wx.StaticBoxSizer(examples_box, wx.VERTICAL)
-        
+
         examples = [
             "Exact match: '2-1.3' (Bus ID)",
             "Regex match: 're:USB.*Storage' (Description)",
             "Regex match: 're:VID_0403&PID_6001' (Instance ID)",
             "Regex match: 're:2-1\\.[0-9]+' (Bus ID pattern)"
         ]
-        
+
         for example in examples:
             example_text = wx.StaticText(self, label=example)
             example_text.SetFont(example_text.GetFont().Scale(0.9))
             examples_sizer.Add(example_text, flag=wx.ALL, border=2)
-        
+
         sizer.Add(examples_sizer, flag=wx.ALL | wx.EXPAND, border=8)
 
         btn_sizer = wx.StdDialogButtonSizer()
@@ -1947,10 +1951,10 @@ class CustomProfileDialog(wx.Dialog):
         btn_sizer.AddButton(ok_btn)
         btn_sizer.AddButton(cancel_btn)
         btn_sizer.Realize()
-        
+
         # Bind OK button to validation
         ok_btn.Bind(wx.EVT_BUTTON, self.on_ok)
-        
+
         sizer.Add(btn_sizer, flag=wx.ALL | wx.ALIGN_CENTER, border=8)
 
         self.SetSizerAndFit(sizer)
@@ -1959,14 +1963,14 @@ class CustomProfileDialog(wx.Dialog):
     def on_ok(self, event):
         """Validate regex patterns before accepting the dialog"""
         bus_id, description, instance_id = self.get_values()
-        
+
         # Validate regex patterns
         fields = [
             ("Bus ID", bus_id),
             ("Description", description),
             ("Instance ID", instance_id)
         ]
-        
+
         for field_name, value in fields:
             if value and value.startswith("re:"):
                 pattern = value[3:]
@@ -1980,7 +1984,7 @@ class CustomProfileDialog(wx.Dialog):
                         self
                     )
                     return
-        
+
         event.Skip()  # Continue with default OK behavior
 
     def get_values(self):
