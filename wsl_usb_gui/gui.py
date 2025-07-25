@@ -733,10 +733,23 @@ class WslUsbGui(wx.Frame):
     def update_pinned_listbox(self, focus=None):
         self.pinned_listbox.DeleteAllItems()
         for profile in self.pinned_profiles:
-            if not profile.Description:
-                profile.Description = self.lookup_description(profile.InstanceId)
+            display_profile = Profile(
+                BusId=profile.BusId,
+                Description=profile.Description,
+                InstanceId=profile.InstanceId,
+                enabled=profile.enabled
+            )
+            
+            # If no description, try to look it up or use InstanceId
+            if not display_profile.Description:
+                looked_up = self.lookup_description(profile.InstanceId)
+                if looked_up:
+                    display_profile.Description = looked_up
+                elif profile.InstanceId:
+                    display_profile.Description = f"[{profile.InstanceId}]"
+            
             highlight = focus is not None and profile == focus
-            self.pinned_listbox.Append(profile, highlight=highlight)
+            self.pinned_listbox.Append(display_profile, highlight=highlight)
 
     # Define a function to implement choice function
     def auto_attach_wsl_choice(self, profile: Profile):
@@ -791,9 +804,9 @@ class WslUsbGui(wx.Frame):
         dlg = CustomProfileDialog(self, "Edit", profile.BusId, profile.Description, profile.InstanceId)
         if dlg.ShowModal() == wx.ID_OK:
             busid, description, instanceid = dlg.get_values()
-            if not (busid or (instanceid and description)):
+            if not (busid or description or instanceid):
                 wx.MessageBox(
-                    "Please provide either Bus ID or both Instance ID and Description.",
+                    "Please provide at least one field: Bus ID, Description, or Instance ID.",
                     "Invalid Input",
                     wx.OK | wx.ICON_ERROR,
                 )
@@ -810,9 +823,9 @@ class WslUsbGui(wx.Frame):
         dlg = CustomProfileDialog(self, "Add", busid, description, instanceid)
         if dlg.ShowModal() == wx.ID_OK:
             busid, description, instanceid = dlg.get_values()
-            if not (busid or (instanceid and description)):
+            if not (busid or description or instanceid):
                 wx.MessageBox(
-                    "Please provide either Bus ID or both Instance ID and Description.",
+                    "Please provide at least one field: Bus ID, Description, or Instance ID.",
                     "Invalid Input",
                     wx.OK | wx.ICON_ERROR,
                 )
