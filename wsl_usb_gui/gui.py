@@ -166,6 +166,8 @@ class WslUsbGui(wx.Frame):
 
         self.auto_start_at_boot = False
         self.close_to_tray = True
+        # Whether to flash taskbar / request user attention when a new USB device appears while unfocussed
+        self.notify_on_new_device = True
 
 
         self.load_config()
@@ -549,6 +551,7 @@ class WslUsbGui(wx.Frame):
                 self.first_run = config.get("first_run", True)
                 self.auto_start_at_boot = config.get("auto_start_at_boot", self.auto_start_at_boot)
                 self.close_to_tray = config.get("close_to_tray", self.close_to_tray)
+                self.notify_on_new_device = config.get("notify_on_new_device", self.notify_on_new_device)
 
         except Exception as ex:
             pass
@@ -562,6 +565,7 @@ class WslUsbGui(wx.Frame):
             first_run=__version__,
             auto_start_at_boot=self.auto_start_at_boot,
             close_to_tray=self.close_to_tray,
+            notify_on_new_device=self.notify_on_new_device,
 
         )
         CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
@@ -1098,7 +1102,7 @@ class WslUsbGui(wx.Frame):
                     task = asyncio.create_task(self.attach_if_pinned(device, highlight=new))
                     tasks.append(task)
 
-            if new_devices and not self.window_is_focussed():
+            if new_devices and self.notify_on_new_device and not self.window_is_focussed():
                 self.RequestUserAttention()
             await asyncio.gather(*tasks)
         finally:
@@ -2012,18 +2016,22 @@ class SettingsWindow(wx.Dialog):
 
         # Create a sizer for layout
         sizer = wx.BoxSizer(wx.VERTICAL)
-
         # Minimise to tray checkbox
         self.minimize_tray_checkbox = wx.CheckBox(outer_panel, label="Close to tray (run in background)")
-        self.minimize_tray_checkbox.SetValue(parent.close_to_tray)  # Example
+        self.minimize_tray_checkbox.SetValue(parent.close_to_tray)
 
         # Auto-start checkbox
         self.auto_start_checkbox = wx.CheckBox(outer_panel, label="Auto-start with Windows")
         self.auto_start_checkbox.SetValue(parent.auto_start_at_boot)
 
+        # Notify on new device checkbox
+        self.notify_new_device_checkbox = wx.CheckBox(outer_panel, label="Taskbar notifications")
+        self.notify_new_device_checkbox.SetValue(parent.notify_on_new_device)
+
         # Add checkboxes to sizer
         sizer.Add(self.minimize_tray_checkbox, 0, wx.ALL | wx.ALIGN_LEFT, border=8)
         sizer.Add(self.auto_start_checkbox, 0, wx.ALL | wx.ALIGN_LEFT, border=8)
+        sizer.Add(self.notify_new_device_checkbox, 0, wx.ALL | wx.ALIGN_LEFT, border=8)
 
         close_button = wx.Button(outer_panel, label="Close")
         sizer.AddSpacer(8)
@@ -2049,6 +2057,10 @@ class SettingsWindow(wx.Dialog):
         if self.auto_start_checkbox.Value != self.parent.auto_start_at_boot:
             self.parent.auto_start_at_boot = self.auto_start_checkbox.Value
             self.parent.update_auto_start_at_boot()
+            need_save = True
+
+        if self.notify_new_device_checkbox.Value != self.parent.notify_on_new_device:
+            self.parent.notify_on_new_device = self.notify_new_device_checkbox.Value
             need_save = True
 
         if need_save:
