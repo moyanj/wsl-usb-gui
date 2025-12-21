@@ -5,4 +5,4 @@ try:
 
     gui.main()
 except:
-    log.exception("APPCRASH")
+    log.exception("应用程序崩溃")

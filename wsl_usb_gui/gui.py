@@ -142,7 +142,7 @@ def get_icon(name="usb.ico"):
 
 class WslUsbGui(wx.Frame):
     def __init__(self, minimised=False):
-        wx.Frame.__init__(self, None, title=f"WSL USB Manager {__version__}")
+        wx.Frame.__init__(self, None, title=f"WSL USB 管理器 {__version__}")
 
         self.icon = get_icon()
 
@@ -176,22 +176,22 @@ class WslUsbGui(wx.Frame):
 
         self.filemenu = wx.Menu()
         # wx.ID_ABOUT and wx.ID_EXIT are standard IDs provided by wxWidgets.
-        settings_menu = self.filemenu.Append(wx.ID_ANY, "&Settings"," Show Settings")
+        settings_menu = self.filemenu.Append(wx.ID_ANY, "&设置"," 显示设置")
         self.Bind(wx.EVT_MENU, self.show_settings_window, settings_menu)
-        about_menu = self.filemenu.Append(wx.ID_ABOUT, "&About"," Information about this program")
+        about_menu = self.filemenu.Append(wx.ID_ABOUT, "&关于"," 关于此程序的信息")
         self.Bind(wx.EVT_MENU, self._go_to_about, about_menu)
-        logs_menu = self.filemenu.Append(wx.ID_ANY, "&Logs"," Open logs folder in explorer")
+        logs_menu = self.filemenu.Append(wx.ID_ANY, "&日志"," 在资源管理器中打开日志文件夹")
         self.Bind(wx.EVT_MENU, self._open_logs_folder, logs_menu)
-        hide_menu = self.filemenu.Append(wx.ID_ANY, "Mi&nimise"," Minimise to Tray")
+        hide_menu = self.filemenu.Append(wx.ID_ANY, "最&小化"," 最小化到托盘")
         self.Bind(wx.EVT_MENU, self.minimise, hide_menu)
-        udev_menu = self.filemenu.Append(wx.ID_ANY, "Udev: allow all"," Add user permissions for all devices udev rule")
+        udev_menu = self.filemenu.Append(wx.ID_ANY, "Udev: 允许所有设备"," 为所有设备添加 udev 用户权限规则")
         self.Bind(wx.EVT_MENU, bg_af(self.udev_permissive_all), udev_menu)
         self.filemenu.AppendSeparator()
-        exit_menu = self.filemenu.Append(wx.ID_EXIT, "E&xit"," Terminate the program")
+        exit_menu = self.filemenu.Append(wx.ID_EXIT, "退&出"," 终止程序")
         self.Bind(wx.EVT_MENU, self.taskbar.OnExit, exit_menu)
 
         self.menuBar = wx.MenuBar()
-        self.menuBar.Append(self.filemenu,"&File")
+        self.menuBar.Append(self.filemenu,"&文件")
         self.SetMenuBar(self.menuBar)
 
         self.statusbar = self.CreateStatusBar()
@@ -217,12 +217,12 @@ class WslUsbGui(wx.Frame):
         top_sizer = wx.BoxSizer(wx.VERTICAL)
         top_panel.SetSizerAndFit(top_sizer)
 
-        available_list_label = wx.StaticText(top_panel, label="Windows USB Devices")
+        available_list_label = wx.StaticText(top_panel, label="Windows USB 设备")
         available_list_label.SetFont(headingFont)
 
         self.busy_icon = wx.adv.AnimationCtrl(top_panel, wx.ID_ANY)
         self.busy_icon.LoadFile(str(get_resource("busy.gif")))
-        refresh_button = self.Button(top_panel, "Refresh", command=self.refresh)
+        refresh_button = self.Button(top_panel, "刷新", command=self.refresh)
 
         top_controls = wx.BoxSizer(wx.HORIZONTAL)
         top_controls.Add(available_list_label, 2, wx.EXPAND | wx.TOP | wx.LEFT, border=6)
@@ -253,39 +253,39 @@ class WslUsbGui(wx.Frame):
             if not device or clicked_on_background:
                 if self.show_hidden:
                     entries = [
-                        ("Mask hidden devices", self.mask_hidden_devices,),
+                        ("隐藏已屏蔽设备", self.mask_hidden_devices,),
                     ]
                 else:
                     entries = [
-                        ("Show hidden devices", self.show_hidden_devices,),
+                        ("显示已隐藏设备", self.show_hidden_devices,),
                     ]
             else:
                 entries = [
-                    ("Attach to WSL", bg_af(self.attach_wsl)),
-                    ("Auto-Attach Device", self.auto_attach_wsl),
-                    ("Rename Device", self.rename_device),
+                    ("附加到 WSL", bg_af(self.attach_wsl)),
+                    ("自动附加设备", self.auto_attach_wsl),
+                    ("重命名设备", self.rename_device),
 
                 ]
                 if not device.bound:
                     entries.extend([
-                        ("Bind", bg_af(self.bind)),
-                        ("Force Bind", bg_af(self.force_bind)),
+                        ("绑定", bg_af(self.bind)),
+                        ("强制绑定", bg_af(self.force_bind)),
                     ])
                 else:
                     entries.extend([
-                        ("Force Bind", bg_af(self.force_bind)),
-                        ("Unbind", bg_af(self.unbind)),
+                        ("强制绑定", bg_af(self.force_bind)),
+                        ("解除绑定", bg_af(self.unbind)),
                     ])
                 if device.InstanceId not in self.hidden_devices:
                     entries.extend([
-                        ("Hide", self.hide_device),
+                        ("隐藏", self.hide_device),
                     ])
                 else:
                     entries.extend([
-                        ("Unhide", self.unhide_device),
+                        ("取消隐藏", self.unhide_device),
                     ])
                 entries.extend([
-                    ("Create Custom Auto Attach Profile", self.add_custom_profile_context_menu),
+                    ("创建自定义自动附加配置文件", self.add_custom_profile_context_menu),
                 ])
 
             for entry, fn in entries:
@@ -322,14 +322,14 @@ class WslUsbGui(wx.Frame):
         middle_sizer = wx.BoxSizer(wx.VERTICAL)
         middle_panel.SetSizerAndFit(middle_sizer)
 
-        attached_list_label = wx.StaticText(middle_panel, label="Forwarded Devices")
+        attached_list_label = wx.StaticText(middle_panel, label="已转发设备")
         attached_list_label.SetFont(headingFont)
 
-        attach_button = self.Button(middle_panel, "Attach ↓", acommand=self.attach_wsl)
+        attach_button = self.Button(middle_panel, "附加 ↓", acommand=self.attach_wsl)
 
-        detach_button = self.Button(middle_panel, "↑ Detach", acommand=self.detach_wsl)
-        auto_attach_button = self.Button(middle_panel, "Auto-Attach", command=self.auto_attach_wsl)
-        rename_button = self.Button(middle_panel, "Rename", command=self.rename_device)
+        detach_button = self.Button(middle_panel, "↑ 分离", acommand=self.detach_wsl)
+        auto_attach_button = self.Button(middle_panel, "自动附加", command=self.auto_attach_wsl)
+        rename_button = self.Button(middle_panel, "重命名", command=self.rename_device)
 
         middle_controls = wx.BoxSizer(wx.HORIZONTAL)
         middle_controls.Add(attached_list_label, 2, wx.EXPAND | wx.TOP | wx.LEFT, border=6)
@@ -345,11 +345,11 @@ class WslUsbGui(wx.Frame):
         async def attached_menu(event):
             popupmenu = wx.Menu()
             entries = [
-                ("Detach Device", bg_af(self.detach_wsl)),
-                ("Auto-Attach Device", self.auto_attach_wsl),
-                ("Rename Device", self.rename_device),
-                ("WSL: Grant User Permissions", bg_af(self.udev_permissive)),
-                ("WSL: Set On-Connect Command", self.udev_on_connect_command),
+                ("分离设备", bg_af(self.detach_wsl)),
+                ("自动附加设备", self.auto_attach_wsl),
+                ("重命名设备", self.rename_device),
+                ("WSL: 授予用户权限", bg_af(self.udev_permissive)),
+                ("WSL: 设置连接时命令", self.udev_on_connect_command),
             ]
             for entry, fn in entries:
                 menuItem = popupmenu.Append(-1, entry)
@@ -381,16 +381,16 @@ class WslUsbGui(wx.Frame):
         bottom_sizer = wx.BoxSizer(wx.VERTICAL)
         bottom_panel.SetSizerAndFit(bottom_sizer)
 
-        pinned_list_label = wx.StaticText(bottom_panel, label="Auto-Attach Profiles")
+        pinned_list_label = wx.StaticText(bottom_panel, label="自动附加配置文件")
         pinned_list_label.SetFont(headingFont)
         pinned_list_delete_button = self.Button(
-            bottom_panel, "Delete Profile", command=self.delete_profile
+            bottom_panel, "删除配置文件", command=self.delete_profile
         )
         pinned_list_edit_button = self.Button(
-            bottom_panel, "Edit Profile", command=self.edit_profile
+            bottom_panel, "编辑配置文件", command=self.edit_profile
         )
         pinned_list_add_custom_button = self.Button(
-            bottom_panel, "Custom Profile", command=self.add_custom_profile
+            bottom_panel, "自定义配置文件", command=self.add_custom_profile
         )
 
         bottom_controls = wx.BoxSizer(wx.HORIZONTAL)
@@ -505,7 +505,7 @@ class WslUsbGui(wx.Frame):
             if self.close_to_tray:
                 if not self.informed_about_tray:
                     wx.MessageBox(
-                        caption="Minimising to tray", message=f"This will stay running in background.\nCan be restored/exited from system tray icon.", style=wx.OK | wx.ICON_INFORMATION
+                        caption="最小化到托盘", message=f"此程序将在后台运行。\n可以通过系统托盘图标恢复/退出。", style=wx.OK | wx.ICON_INFORMATION
                     )
                     self.informed_about_tray = True
                     self.save_config()
@@ -639,7 +639,7 @@ class WslUsbGui(wx.Frame):
         if "error:" in stderr and "administrator" in stderr:
             if msg:
                 wx.MessageBox(
-                    caption="Administrator Privileges",
+                    caption="管理员权限",
                     message=msg,
                     style=wx.OK | wx.ICON_INFORMATION,
                 )
@@ -660,7 +660,7 @@ class WslUsbGui(wx.Frame):
             log.info(result.stdout)
         if result.stderr:
             log.error(result.stderr)
-        log.info(f"Bind {bus_id}: {'Success' if not result.returncode else 'Failed'}")
+        log.info(f"Bind {bus_id}: {'成功' if not result.returncode else '失败'}")
         self.refresh(delay=1.0)
         return result
 
@@ -671,14 +671,14 @@ class WslUsbGui(wx.Frame):
             log.info(result.stdout)
         if result.stderr:
             log.error(result.stderr)
-        log.info(f"Unbind {bus_id}: {'Success' if not result.returncode else 'Failed'}")
+        log.info(f"Unbind {bus_id}: {'成功' if not result.returncode else '失败'}")
         self.refresh(delay=1.0)
         return result
 
     async def attach_wsl_usb(self, device: Device):
         msg = (
-            "The first time attaching a device to WSL requires elevated privileges; "
-            "subsequent attaches use standard user privileges."
+            "首次将设备附加到 WSL 需要提升权限；" + 
+            "后续附加使用标准用户权限。"
         )
         if not device.bound:
             result = await self.bind_bus_id(device.BusId, forced=False, msg=msg)
@@ -694,7 +694,7 @@ class WslUsbGui(wx.Frame):
             command = [USBIPD, "attach", "--wsl", "--busid=" + device.BusId]
             result = await WslUsbGui.usbipd_run_admin_if_needed(command, msg)
 
-        status = f"Attached: {device.Description}"
+        status = f"已附加: {device.Description}"
         if result.stdout:
             log.info(result.stdout)
             status = result.stdout
@@ -707,7 +707,7 @@ class WslUsbGui(wx.Frame):
                     pass
                 else:
                     if "client not correctly installed" in stderr_lower_line:
-                        status = "Client not correctly installed, installing dependencies..."
+                        status = "客户端未正确安装，正在安装依赖项..."
                         log.warning(status)
                         install_deps()
 
@@ -716,7 +716,7 @@ class WslUsbGui(wx.Frame):
                         return result
 
                     elif "device busy (exported)" in stderr_lower_line or "the device appears to be used by windows" in stderr_lower_line:
-                        status = "Error: device in use; stop the software using it, or force bind the device."
+                        status = "错误：设备正在使用中；停止使用该设备的软件，或强制绑定设备。"
                         break
 
                     else:
@@ -924,8 +924,8 @@ class WslUsbGui(wx.Frame):
         ])
         log.info(f"udev all rule added: {udev_rule}")
         wx.MessageBox(
-            caption="WSL: Grant User Permissions",
-            message=f"WSL udev user permissions rule added for all usb devices",
+            caption="WSL: 授予用户权限",
+            message=f"已为所有 USB 设备添加 WSL udev 用户权限规则",
             style=wx.OK | wx.ICON_INFORMATION,
         )
 
@@ -965,7 +965,7 @@ class WslUsbGui(wx.Frame):
             return permissions_enabled, run_command
 
         except Exception as ex:
-            log.error(f"Could not read existing udev rules: {ex}")
+            log.error(f"无法读取现有 udev 规则: {ex}")
             return None, None
 
     async def udev_permissive(self, event=None):
@@ -990,18 +990,18 @@ class WslUsbGui(wx.Frame):
                 f"sed -i '{udev_rule_match}' {rules_file}; echo '{udev_rule}' >> {rules_file}; sudo udevadm control --reload-rules; sudo udevadm trigger",
             ])
             # log.info(udev_settings)
-            log.info(f"udev rule added: {udev_rule}")
+            log.info(f"已添加 udev 规则: {udev_rule}")
             wx.MessageBox(
-                caption="WSL: Grant User Permissions",
-                message=f"WSL udev user permissions rule added for VID:{vid} PID:{pid}.",
+                caption="WSL: 授予用户权限",
+                message=f"已为 VID:{vid} PID:{pid} 添加 WSL udev 用户权限规则。",
                 style=wx.OK | wx.ICON_INFORMATION,
             )
 
         except AttributeError as ex:
-            log.error(f"Could not get device information for udev: {ex}")
+            log.error(f"无法获取 udev 的设备信息: {ex}")
             wx.MessageBox(
-                caption="WSL: Grant User Permissions",
-                message=f"ERROR: Failed to add udev rule.",
+                caption="WSL: 授予用户权限",
+                message=f"错误：添加 udev 规则失败。",
                 style=wx.OK | wx.ICON_WARNING,
             )
 
@@ -1040,7 +1040,7 @@ class WslUsbGui(wx.Frame):
             self.busy_icon.Show()
             self.busy_icon.Play()
 
-            log.info("Refresh USB")
+            log.info("刷新 USB")
 
             task = asyncio.create_task(self.list_wsl_usb())
 
@@ -1196,7 +1196,7 @@ class WslUsbGui(wx.Frame):
         if not device:
             return
         result = await self.bind_bus_id(device.BusId, forced=True)
-        log.info(f"Bind (forced) {device.BusId}: {'Success' if not result.returncode else 'Failed'}")
+        log.info(f"Bind (forced) {device.BusId}: {'成功' if not result.returncode else '失败'}")
         self.refresh(delay=3)
 
     async def bind(self, event=None, refresh=True):
@@ -1219,13 +1219,13 @@ class WslUsbGui(wx.Frame):
         if not device:
             return
         result = await self.attach_wsl_usb(device)
-        log.info(f"Attach {device.BusId}: {'Success' if not result.returncode else 'Failed'}")
+        log.info(f"Attach {device.BusId}: {'成功' if not result.returncode else '失败'}")
         self.refresh(delay=3)
 
     async def detach_wsl(self, event=None):
         device = self.get_selection(attached=True)
         if not device:
-            log.error("no selection to detach")
+            log.error("没有选中要分离的项")
             return  # no selected item
         log.info(f"Detach {device.BusId} {device.Description}")
 
@@ -1470,23 +1470,23 @@ class ProportionalSplitter(wx.SplitterWindow):
 
 class popupAutoAttach(wx.Dialog):
     def __init__(self, parent, bus_id, description, instanceId, icon):
-        super().__init__(parent, title="New Auto-Attach Profile")
+        super().__init__(parent, title="新建自动附加配置文件")
 
         if icon:
             self.SetIcon(icon)
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
 
-        message = wx.StaticText(self, label=f"Create Auto-Attach profile for:")
+        message = wx.StaticText(self, label=f"为此设备创建自动附加配置文件：")
         top_sizer.Add(message, proportion=0, flag=wx.TOP | wx.LEFT, border=12)
 
         sizer = wx.FlexGridSizer(3, 2, 2, 2)
-        device_btn = wx.Button(self, label="Device", size=self.FromDIP(wx.Size(60, 24)))
-        device_txt = wx.StaticText(self, label=f"USB Device: {description}")
-        port_btn = wx.Button(self, label="Port", size=self.FromDIP(wx.Size(60, 24)))
-        port_txt = wx.StaticText(self, label=f"USB Port: {bus_id}")
-        both_btn = wx.Button(self, label="Both", size=self.FromDIP(wx.Size(60, 24)))
-        both_txt = wx.StaticText(self, label=f"This device only when plugged into same port.")
+        device_btn = wx.Button(self, label="设备", size=self.FromDIP(wx.Size(60, 24)))
+        device_txt = wx.StaticText(self, label=f"USB 设备: {description}")
+        port_btn = wx.Button(self, label="端口", size=self.FromDIP(wx.Size(60, 24)))
+        port_txt = wx.StaticText(self, label=f"USB 端口: {bus_id}")
+        both_btn = wx.Button(self, label="两者", size=self.FromDIP(wx.Size(60, 24)))
+        both_txt = wx.StaticText(self, label=f"仅当此设备插入同一端口时。")
 
         sizer.AddMany(
             [
@@ -1529,7 +1529,7 @@ class popupAutoAttach(wx.Dialog):
 
 class popupRename(wx.Dialog):
     def __init__(self, parent: WslUsbGui, device: Device):
-        super().__init__(parent, title="Rename Device")
+        super().__init__(parent, title="重命名设备")
 
         self.gui = parent
         self.device = device
@@ -1539,18 +1539,18 @@ class popupRename(wx.Dialog):
 
         top_sizer = wx.BoxSizer(wx.VERTICAL)
 
-        label = f"Enter new label for device on port: {device.BusId}"
+        label = f"输入设备新标签（端口：{device.BusId}"
         message = wx.StaticText(self, label=label)
         font = message.GetFont()
         font.SetWeight(wx.BOLD)
         message.SetFont(font)
         top_sizer.Add(message, flag=wx.TOP | wx.LEFT | wx.RIGHT, border=12)
 
-        top_sizer.Add(wx.StaticText(self, label="  Click buttons below to fill from defaults,"), flag=wx.LEFT | wx.RIGHT, border=12)
-        top_sizer.Add(wx.StaticText(self, label="  Type your own label,"), flag=wx.LEFT | wx.RIGHT, border=12)
-        top_sizer.Add(wx.StaticText(self, label="  Or leave blank to reset to default."), flag=wx.LEFT | wx.RIGHT, border=12)
+        top_sizer.Add(wx.StaticText(self, label="  点击下方按钮从默认值填充，"), flag=wx.LEFT | wx.RIGHT, border=12)
+        top_sizer.Add(wx.StaticText(self, label="  输入您自己的标签，"), flag=wx.LEFT | wx.RIGHT, border=12)
+        top_sizer.Add(wx.StaticText(self, label="  或留空以重置为默认值。"), flag=wx.LEFT | wx.RIGHT, border=12)
 
-        top_sizer.Add(wx.StaticText(self, label="Driver Default:"), flag=wx.TOP | wx.LEFT | wx.RIGHT, border=12)
+        top_sizer.Add(wx.StaticText(self, label="驱动默认值："), flag=wx.TOP | wx.LEFT | wx.RIGHT, border=12)
         default_btn = wx.Button(self, label=device.OrigDescription)
         top_sizer.Add(default_btn, flag=wx.RIGHT | wx.LEFT | wx.EXPAND, border=20)
 
@@ -1565,22 +1565,22 @@ class popupRename(wx.Dialog):
             if details.Manufacturer and details.Product:
                 dev_label = f"{details.Manufacturer} {details.Product}"
 
-                top_sizer.Add(wx.StaticText(self, label="Device Details:"), flag=wx.TOP | wx.LEFT | wx.RIGHT, border=12)
+                top_sizer.Add(wx.StaticText(self, label="设备详细信息："), flag=wx.TOP | wx.LEFT | wx.RIGHT, border=12)
                 device_btn = wx.Button(self, label=dev_label)
                 top_sizer.Add(device_btn, flag=wx.RIGHT | wx.LEFT | wx.EXPAND, border=20)
 
 
         top_sizer.Add(wx.StaticLine(self, style=wx.LI_HORIZONTAL | wx.EXPAND), flag=wx.TOP | wx.BOTTOM | wx.LEFT | wx.RIGHT | wx.EXPAND, border=8)
 
-        top_sizer.Add(wx.StaticText(self, label="New Name:"), flag=wx.LEFT | wx.RIGHT, border=12)
+        top_sizer.Add(wx.StaticText(self, label="新名称："), flag=wx.LEFT | wx.RIGHT, border=12)
 
         self.textEntry = wx.TextCtrl(self, -1, current, size=wx.Size(-1, self.FromDIP(26)))
         top_sizer.Add(self.textEntry, flag=wx.RIGHT | wx.LEFT | wx.EXPAND, border=12)
 
         btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        ok_btn = wx.Button(self, label="OK", size=self.FromDIP(wx.Size(60, 24)))
-        reset_btn = wx.Button(self, label="Reset", size=self.FromDIP(wx.Size(60, 24)))
-        cancel_btn = wx.Button(self, label="Cancel", size=self.FromDIP(wx.Size(60, 24)))
+        ok_btn = wx.Button(self, label="确定", size=self.FromDIP(wx.Size(60, 24)))
+        reset_btn = wx.Button(self, label="重置", size=self.FromDIP(wx.Size(60, 24)))
+        cancel_btn = wx.Button(self, label="取消", size=self.FromDIP(wx.Size(60, 24)))
         btn_sizer.Add(ok_btn, border=6)
         btn_sizer.Add(reset_btn, border=6)
         btn_sizer.Add(cancel_btn, border=6)
@@ -1628,7 +1628,7 @@ class popupRename(wx.Dialog):
 
 class popupOnConnectCommand(wx.Dialog):
     def __init__(self, parent: WslUsbGui, device: Device):
-        super().__init__(parent, title="Set On-Connect Command")
+        super().__init__(parent, title="设置连接时命令")
 
         self.gui = parent
         self.device = device
@@ -1639,7 +1639,7 @@ class popupOnConnectCommand(wx.Dialog):
         top_sizer = wx.BoxSizer(wx.VERTICAL)
 
         # Device info
-        device_label = f"Device: {device.Description} (VID:{self.vid} PID:{self.pid})"
+        device_label = f"设备: {device.Description} (VID:{self.vid} PID:{self.pid})"
         message = wx.StaticText(self, label=device_label)
         font = message.GetFont()
         font.SetWeight(wx.BOLD)
@@ -1647,27 +1647,27 @@ class popupOnConnectCommand(wx.Dialog):
         top_sizer.Add(message, flag=wx.TOP | wx.LEFT | wx.RIGHT, border=12)
 
         # Description
-        desc_text = wx.StaticText(self, label="Configure command to run when this device is connected:")
+        desc_text = wx.StaticText(self, label="配置此设备连接时要运行的命令：")
         top_sizer.Add(desc_text, flag=wx.TOP | wx.LEFT | wx.RIGHT, border=12)
 
         top_sizer.Add(wx.StaticLine(self, style=wx.LI_HORIZONTAL | wx.EXPAND),
                      flag=wx.TOP | wx.BOTTOM | wx.LEFT | wx.RIGHT | wx.EXPAND, border=8)
 
         # Command text field
-        command_label = wx.StaticText(self, label="On-Connect Command:")
+        command_label = wx.StaticText(self, label="连接时命令：")
         top_sizer.Add(command_label, flag=wx.LEFT | wx.RIGHT, border=12)
 
         self.command_text = wx.TextCtrl(self, -1, "", size=wx.Size(400, self.FromDIP(26)))
         top_sizer.Add(self.command_text, flag=wx.RIGHT | wx.LEFT | wx.EXPAND, border=12)
 
         # Permissions checkbox
-        self.permissions_checkbox = wx.CheckBox(self, label="Enable user permissions (MODE=\"0666\")")
+        self.permissions_checkbox = wx.CheckBox(self, label="启用用户权限 (MODE=\"0666\")")
         top_sizer.Add(self.permissions_checkbox, flag=wx.TOP | wx.LEFT | wx.RIGHT, border=12)
 
         # Buttons
         btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        ok_btn = wx.Button(self, label="OK", size=self.FromDIP(wx.Size(60, 24)))
-        cancel_btn = wx.Button(self, label="Cancel", size=self.FromDIP(wx.Size(60, 24)))
+        ok_btn = wx.Button(self, label="确定", size=self.FromDIP(wx.Size(60, 24)))
+        cancel_btn = wx.Button(self, label="取消", size=self.FromDIP(wx.Size(60, 24)))
         btn_sizer.Add(ok_btn, border=6)
         btn_sizer.Add(cancel_btn, border=6)
         top_sizer.Add(btn_sizer, flag=wx.BOTTOM | wx.TOP | wx.RIGHT | wx.LEFT | wx.EXPAND, border=12)
@@ -1697,7 +1697,7 @@ class popupOnConnectCommand(wx.Dialog):
                     self.command_text.SetValue(run_command)
 
             except Exception as ex:
-                log.error(f"Could not load existing udev settings: {ex}")
+                log.error(f"无法加载现有 udev 设置: {ex}")
 
         # Run the async function
         asyncio.get_running_loop().call_soon_threadsafe(
@@ -1716,10 +1716,10 @@ class popupOnConnectCommand(wx.Dialog):
                 await self.save_udev_rule(command, permissions_enabled)
                 wx.CallAfter(self.Close)
             except Exception as ex:
-                log.error(f"Could not save udev rule: {ex}")
+                log.error(f"无法保存 udev 规则: {ex}")
                 wx.CallAfter(wx.MessageBox,
-                           "ERROR: Failed to save udev rule.",
-                           "Error",
+                           "错误：添加 udev 规则失败。",
+                           "错误",
                            wx.OK | wx.ICON_ERROR)
 
         # Run the async function
@@ -1765,19 +1765,19 @@ class popupOnConnectCommand(wx.Dialog):
                 "wsl", "--user", "root", "sh", "-c",
                 f"sed -i '{udev_rule_match}' {rules_file}; echo '{udev_rule}' >> {rules_file}; sudo udevadm control --reload-rules; sudo udevadm trigger",
             ])
-            log.info(f"udev rule saved: {udev_rule}")
+            log.info(f"已保存 udev 规则: {udev_rule}")
         else:
             # Just remove existing rules if no settings specified
             await run([
                 "wsl", "--user", "root", "sh", "-c",
                 f"sed -i '{udev_rule_match}' {rules_file}; sudo udevadm control --reload-rules; sudo udevadm trigger",
             ])
-            log.info(f"udev rules removed for device VID:{self.vid} PID:{self.pid}")
+            log.info(f"已为设备 VID:{self.vid} PID:{self.pid} 移除 udev 规则")
 
         # Show success message
         wx.CallAfter(wx.MessageBox,
-                   f"Udev rule updated for VID:{self.vid} PID:{self.pid}",
-                   "Success",
+                   f"已更新 VID:{self.vid} PID:{self.pid} 的 Udev 规则",
+                   "成功",
                    wx.OK | wx.ICON_INFORMATION)
 
 
@@ -1857,11 +1857,11 @@ class TaskBarIcon(wx.adv.TaskBarIcon):
         menu = wx.Menu()
 
         # Add an option to restore the window when clicked
-        restore = menu.Append(wx.ID_ANY, 'Restore')
+        restore = menu.Append(wx.ID_ANY, '恢复')
         self.Bind(wx.EVT_MENU, self.OnRestore, restore)
 
         # Add an option to exit the application when clicked
-        exit_app = menu.Append(wx.ID_EXIT, 'Exit')
+        exit_app = menu.Append(wx.ID_EXIT, '退出')
         self.Bind(wx.EVT_MENU, self.OnExit, exit_app)
 
         return menu
@@ -1898,15 +1898,15 @@ async def check_usbipd_version():
 
 class CustomProfileDialog(wx.Dialog):
     def __init__(self, parent, prefix="Add", bus_id=None, description=None, instance_id=None):
-        super().__init__(parent, title=f"{prefix} Custom Profile", style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
+        super().__init__(parent, title=f"{prefix} 自定义配置文件", style=wx.DEFAULT_DIALOG_STYLE | wx.RESIZE_BORDER)
         # All controls must use self as parent
         sizer = wx.BoxSizer(wx.VERTICAL)
 
-        label = wx.StaticText(self, label=f"{prefix} custom auto-attach profile:")
+        label = wx.StaticText(self, label=f"{prefix} 自定义自动附加配置文件：")
         sizer.Add(label, flag=wx.ALL, border=8)
 
         # Add help text explaining regex syntax
-        help_text = wx.StaticText(self, label="Tip: Use 're:' prefix for regex patterns (e.g., 're:USB.*Storage')")
+        help_text = wx.StaticText(self, label="提示：正则表达式模式请使用 're:' 前缀（例如，'re:USB.*Storage'）")
         help_text.SetFont(help_text.GetFont().Italic())
         help_text.SetForegroundColour(wx.Colour(100, 100, 100))
         sizer.Add(help_text, flag=wx.LEFT | wx.RIGHT | wx.BOTTOM, border=8)
@@ -1914,17 +1914,17 @@ class CustomProfileDialog(wx.Dialog):
         grid = wx.FlexGridSizer(3, 2, 8, 8)
         grid.AddGrowableCol(1, 1)
 
-        busid_label = wx.StaticText(self, label="Bus ID:")
+        busid_label = wx.StaticText(self, label="总线 ID：")
         self.busid_ctrl = wx.TextCtrl(self, value=bus_id or "", size=(400, -1))
         grid.Add(busid_label, flag=wx.ALIGN_CENTER_VERTICAL)
         grid.Add(self.busid_ctrl, flag=wx.EXPAND)
 
-        description_label = wx.StaticText(self, label="Description:")
+        description_label = wx.StaticText(self, label="描述：")
         self.description_ctrl = wx.TextCtrl(self, value=description or "", size=(400, -1))
         grid.Add(description_label, flag=wx.ALIGN_CENTER_VERTICAL)
         grid.Add(self.description_ctrl, flag=wx.EXPAND)
 
-        instanceid_label = wx.StaticText(self, label="Instance ID:")
+        instanceid_label = wx.StaticText(self, label="实例 ID：")
         self.instanceid_ctrl = wx.TextCtrl(self, value=instance_id or "", size=(400, -1))
         grid.Add(instanceid_label, flag=wx.ALIGN_CENTER_VERTICAL)
         grid.Add(self.instanceid_ctrl, flag=wx.EXPAND)
@@ -1932,14 +1932,14 @@ class CustomProfileDialog(wx.Dialog):
         sizer.Add(grid, flag=wx.ALL | wx.EXPAND, border=8)
 
         # Add examples section
-        examples_box = wx.StaticBox(self, label="Examples")
+        examples_box = wx.StaticBox(self, label="示例")
         examples_sizer = wx.StaticBoxSizer(examples_box, wx.VERTICAL)
 
         examples = [
-            "Exact match: '2-1.3' (Bus ID)",
-            "Regex match: 're:USB.*Storage' (Description)",
-            "Regex match: 're:VID_0403&PID_6001' (Instance ID)",
-            "Regex match: 're:2-1\\.[0-9]+' (Bus ID pattern)"
+            "精确匹配：'2-1.3'（总线 ID）",
+            "正则表达式匹配：'re:USB.*Storage'（描述）",
+            "正则表达式匹配：'re:VID_0403&PID_6001'（实例 ID）",
+            "正则表达式匹配：'re:2-1\\.[0-9]+'（总线 ID 模式）"
         ]
 
         for example in examples:
@@ -1950,8 +1950,8 @@ class CustomProfileDialog(wx.Dialog):
         sizer.Add(examples_sizer, flag=wx.ALL | wx.EXPAND, border=8)
 
         btn_sizer = wx.StdDialogButtonSizer()
-        ok_btn = wx.Button(self, wx.ID_OK)
-        cancel_btn = wx.Button(self, wx.ID_CANCEL)
+        ok_btn = wx.Button(self, wx.ID_OK, label="确定")
+        cancel_btn = wx.Button(self, wx.ID_CANCEL, label="取消")
         btn_sizer.AddButton(ok_btn)
         btn_sizer.AddButton(cancel_btn)
         btn_sizer.Realize()
@@ -1970,9 +1970,9 @@ class CustomProfileDialog(wx.Dialog):
 
         # Validate regex patterns
         fields = [
-            ("Bus ID", bus_id),
-            ("Description", description),
-            ("Instance ID", instance_id)
+            ("总线 ID", bus_id),
+            ("描述", description),
+            ("实例 ID", instance_id)
         ]
 
         for field_name, value in fields:
@@ -1982,8 +1982,8 @@ class CustomProfileDialog(wx.Dialog):
                     re.compile(pattern)
                 except re.error as e:
                     wx.MessageBox(
-                        f"Invalid regex pattern in {field_name}:\n{pattern}\n\nError: {str(e)}",
-                        "Invalid Regex",
+                        f"在 {field_name} 中存在无效正则表达式模式：\n{pattern}\n\n错误：{str(e)}",
+                        "无效正则表达式",
                         wx.OK | wx.ICON_ERROR,
                         self
                     )
@@ -2010,22 +2010,22 @@ class CustomProfileDialog(wx.Dialog):
 
 class SettingsWindow(wx.Dialog):
     def __init__(self, parent: WslUsbGui):
-        super().__init__(parent, title="Settings")
+        super().__init__(parent, title="设置")
         self.parent = parent
         outer_panel = wx.Panel(self)
 
         # Create a sizer for layout
         sizer = wx.BoxSizer(wx.VERTICAL)
         # Minimise to tray checkbox
-        self.minimize_tray_checkbox = wx.CheckBox(outer_panel, label="Close to tray (run in background)")
+        self.minimize_tray_checkbox = wx.CheckBox(outer_panel, label="关闭到托盘（后台运行）")
         self.minimize_tray_checkbox.SetValue(parent.close_to_tray)
 
         # Auto-start checkbox
-        self.auto_start_checkbox = wx.CheckBox(outer_panel, label="Auto-start with Windows")
+        self.auto_start_checkbox = wx.CheckBox(outer_panel, label="随 Windows 自动启动")
         self.auto_start_checkbox.SetValue(parent.auto_start_at_boot)
 
         # Notify on new device checkbox
-        self.notify_new_device_checkbox = wx.CheckBox(outer_panel, label="Taskbar notifications")
+        self.notify_new_device_checkbox = wx.CheckBox(outer_panel, label="任务栏通知")
         self.notify_new_device_checkbox.SetValue(parent.notify_on_new_device)
 
         # Add checkboxes to sizer
@@ -2033,7 +2033,7 @@ class SettingsWindow(wx.Dialog):
         sizer.Add(self.auto_start_checkbox, 0, wx.ALL | wx.ALIGN_LEFT, border=8)
         sizer.Add(self.notify_new_device_checkbox, 0, wx.ALL | wx.ALIGN_LEFT, border=8)
 
-        close_button = wx.Button(outer_panel, label="Close")
+        close_button = wx.Button(outer_panel, label="关闭")
         sizer.AddSpacer(8)
         sizer.Add(close_button, 0, wx.ALIGN_CENTRE | wx.ALL, border=8)
         self.Bind(wx.EVT_BUTTON, self.Save, close_button)
@@ -2097,7 +2097,7 @@ async def amain():
         else:
             # Fallback if window not found
             log.warning(f"Another instance is running, but could not find window with title: {window_title}")
-            wx.MessageBox(caption="Already running", message="Another instance of the app is already running,\ncould not bring it to front.", style=wx.OK | wx.ICON_WARNING)
+            wx.MessageBox(caption="已在运行", message="应用程序的另一个实例已在运行，\n无法将其置于前台。", style=wx.OK | wx.ICON_WARNING)
         return # Exit the new instance
 
     gui = WslUsbGui(minimised=args.minimised)
