@@ -24,17 +24,17 @@ jobs:
         wget https://github.com/mitsuhiko/rye/releases/download/0.11.0/rye-x86_64-windows.exe -UseBasicParsing -OutFile rye.exe
         $env:path += ";."
 
-        rye run python -m ensurepip
+        .\rye.exe run python -m ensurepip
 
     - name: Install Python dependencies
       shell: powershell
-      run: rye run python -m pip install -r requirements.lock
+      run: .\rye.exe run python -m pip install -r requirements.lock
 
     - name: Get project version
       id: get_version
       shell: powershell
       run: |
-        $version = @(rye run git-versioner --python --short)
+        $version = @(.\rye.exe run git-versioner --python --short)
         echo "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Encoding UTF-8
 
     - name: Install WIX Toolset
