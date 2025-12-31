@@ -1,0 +1,50 @@
+name: Build Windows Installer
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0 # Required for git-versioner
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10.11'
+
+    - name: Install uv
+      run: pip install uv
+
+    - name: Install dependencies
+      run: uv sync --locked
+
+    - name: Install WiX Toolkit
+      run: |
+        Invoke-WebRequest -Uri https://github.com/wixtoolset/wix3/releases/download/wix311rtm/wix311-binaries.zip -UseBasicParsing -OutFile c:\wix311-binaries.zip
+        New-Item -Path c:\wix311 -ItemType Directory
+        Expand-Archive -Path c:\wix311-binaries.zip -DestinationPath c:\wix311\bin
+        Add-Content $env:GITHUB_ENV "WIX=C:\wix311\"
+      shell: pwsh
+
+    - name: Build MSI installer
+      run: |
+        $version = $(uv run git-versioner --python --short)
+        echo "Building version: $version"
+        .\pyoxidizer.exe build msi_installer --release --var version "$version"
+      shell: pwsh
+
+    - name: Upload MSI artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: wsl-usb-gui-installer
+        path: build/x86_64-pc-windows-msvc/release/msi_installer/*.msi
+
