@@ -36,10 +36,12 @@ jobs:
       shell: pwsh
 
     - name: Build MSI installer
+      env:
+        PYTHONIOENCODING: UTF-8
       run: |
-        $version = $(uv run git-versioner --python --short)
+        $version = 5.1.0
         echo "Building version: $version"
-        .\pyoxidizer.exe build msi_installer --release --var version "$version"
+        uv run pyoxidizer build msi_installer --release --var version "$version"
       shell: pwsh
 
     - name: Upload MSI artifact
