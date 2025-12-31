@@ -581,6 +581,19 @@ wheels = [
 ]
 
 [[package]]
+name = "pyoxidizer"
+version = "0.24.0"
+source = { registry = "https://mirrors.aliyun.com/pypi/simple" }
+wheels = [
+    { url = "https://mirrors.aliyun.com/pypi/packages/7a/93/aae15e73855e6e9a327528b506b4ae2e6e0f94d301fed8f27015bbe047e4/pyoxidizer-0.24.0-py3-none-macosx_10_9_x86_64.whl", hash = "sha256:eed0f08a38798f14cf0464272552aef97e534b9a418d2a671b8d85ec7af1a237" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/ab/bc/ac789f384f84583a5057b6198553e407e1116375cf1840427bad56d1f97f/pyoxidizer-0.24.0-py3-none-macosx_11_0_arm64.whl", hash = "sha256:1a9940d2bdb6c9e6c6c45eb4de3d4d6e5c9b3a3724dbc7d774d85d4956058447" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/62/e5/2f5a9cc8fb06aff4fe84299bf7fa9815b1eaee81842137e0e98a45ab1b3e/pyoxidizer-0.24.0-py3-none-manylinux2010_x86_64.whl", hash = "sha256:ec56f2b99495aa0178e927389a3e151e9669beae4e2bce3f6897fb9891b5502e" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/72/ff/02653151eb66ce7c945ee19aadcbdd5cd6a8e13e201254bb6a787df851dd/pyoxidizer-0.24.0-py3-none-manylinux2014_aarch64.whl", hash = "sha256:825d37c8d44971f3e7ca6beed77b560b508c69497f48019428f1aae3fd80c049" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/fa/a5/dea667d142e7fe1df7e0f3436df8e9fbebce0a8538fa06534f28492291fd/pyoxidizer-0.24.0-py3-none-win32.whl", hash = "sha256:4ccc59d157952bccb6ab6897f061966ac31403b2cee18fe9dfbd871f429bd34c" },
+    { url = "https://mirrors.aliyun.com/pypi/packages/54/b8/0a8b6c744af3d553f0a7ac8affec7d40a9544a08d6c8b84164003c87c133/pyoxidizer-0.24.0-py3-none-win_amd64.whl", hash = "sha256:9b18f8d5f6b309ec856109b2f4d8228bae513da0b0213991e3305cf73583c385" },
+]
+
+[[package]]
 name = "pyserial"
 version = "3.5"
 source = { registry = "https://mirrors.aliyun.com/pypi/simple" }
@@ -679,6 +692,7 @@ source = { editable = "." }
 dependencies = [
     { name = "appdirs" },
     { name = "git-versioner" },
+    { name = "pyoxidizer" },
     { name = "pyserial" },
     { name = "wxasync" },
     { name = "wxpython" },
@@ -688,6 +702,7 @@ dependencies = [
 requires-dist = [
     { name = "appdirs", specifier = "~=1.4.4" },
     { name = "git-versioner", specifier = ">=7.1" },
+    { name = "pyoxidizer", specifier = "~=0.24.0" },
     { name = "pyserial", specifier = ">=3.5" },
     { name = "wxasync", specifier = "~=0.49" },
     { name = "wxpython", specifier = "==4.2.1" },
