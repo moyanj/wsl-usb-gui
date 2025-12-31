@@ -332,11 +332,6 @@ def make_msi(exe):
 
     msi.msi_filename = "WSL-USB-" + VARS.get("version") + ".msi"
 
-    msi.add_to_start_menu = True
-
-    msi.add_to_path = False
-    msi.per_user_install = True
-
     files = FileManifest()
     files.add_path(CWD + "/wsl_usb_gui/usb.ico", CWD + "/wsl_usb_gui")
     files.add_path(CWD + "/wsl_usb_gui/busy.gif", CWD + "/wsl_usb_gui")
